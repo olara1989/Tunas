@@ -161,7 +161,7 @@ export function EntradasSection({ productores, variedades }) {
 export function ConsolidadorSection({ clientes, variedades }) {
     const { data: detalles, updateNode: updateDetalle } = useFirestore('detalle_entradas');
     const { data: entradas } = useFirestore('registro_entradas');
-    const { addNode: addSalida, updateNode: updateEntrada } = useFirestore('registro_salidas');
+    const { addNode: addSalida } = useFirestore('registro_salidas');
     const { addNode: addDetalleSalida } = useFirestore('detalle_salidas');
 
     const [cart, setCart] = useState([]); // Array of {detalleEntrada, cantidad, precio_dia}
@@ -224,8 +224,6 @@ export function ConsolidadorSection({ clientes, variedades }) {
         } catch (e) { setError(e.message); }
         finally { setSaving(false); }
     };
-
-    const getEntrada = (id) => entradas.find(e => e.id === id);
 
     return (
         <div className="space-y-4">
@@ -309,7 +307,7 @@ export function ConsolidadorSection({ clientes, variedades }) {
 }
 
 /* ── Historial de Salidas ── */
-export function SalidasSection({ clientes, variedades }) {
+export function SalidasSection({ clientes }) {
     const { data: salidas, loading, error } = useFirestore('registro_salidas');
     const { data: detalleSalidas } = useFirestore('detalle_salidas');
     const { data: detalleEntradas } = useFirestore('detalle_entradas');

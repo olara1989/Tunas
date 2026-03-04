@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   LayoutDashboard, Tractor, PackageSearch,
-  Wrench, Settings, Sprout, TrendingUp, ShoppingCart, AlertTriangle, ShieldCheck, User
+  Wrench, Settings, Sprout, TrendingUp, ShoppingCart, AlertTriangle, ShieldCheck, User, LogOut,
+  ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { useFirestore } from './hooks/useFirestore';
@@ -13,6 +14,51 @@ import { EntradasSection, ConsolidadorSection, SalidasSection } from './componen
 import Login from './components/Login';
 import { AccountModule } from './components/AccountModule';
 import { AdminModules } from './components/AdminModules';
+
+/* ─── Market Ticker ─────────────────── */
+function MarketTicker({ variedades = [] }) {
+  const displayItems = useMemo(() => {
+    return variedades.map(v => ({
+      name: v.nombre,
+      pCompra: `$${v.precio_compra || 0}`,
+      pVenta: `$${v.precio_venta || 0}`,
+      unit: v.presentacion_default || 'Caja'
+    }));
+  }, [variedades]);
+
+  return (
+    <div className="bg-slate-900 border-b border-slate-800 h-10 flex items-center overflow-hidden sticky top-0 z-30">
+      <div className="bg-green-600 h-full flex items-center px-4 z-10 shadow-lg">
+        <span className="text-[10px] font-bold text-white uppercase tracking-widest whitespace-nowrap">
+          Precios Sugeridos
+        </span>
+      </div>
+      <div className="flex-1 relative overflow-hidden h-full flex items-center">
+        <div className="animate-ticker flex items-center gap-16 pl-4">
+          {[...displayItems, ...displayItems].map((item, i) => (
+            <div key={i} className="flex items-center gap-4 group cursor-default">
+              <span className="text-slate-200 text-xs font-black uppercase tracking-wider">{item.name}:</span>
+
+              <div className="flex gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-500 text-[10px] font-bold">C:</span>
+                  <span className="text-white text-sm font-bold">{item.pCompra}</span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-500 text-[10px] font-bold">V:</span>
+                  <span className="text-green-400 text-sm font-bold">{item.pVenta}</span>
+                </div>
+              </div>
+
+              <span className="text-slate-500 text-[10px] lowercase italic">/{item.unit}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 
 /* ─── Nav Item ─────────────────── */
@@ -35,20 +81,6 @@ function NavItem({ icon: Icon, label, active, onClick }) {
 
 /* ─── Dashboard ─────────────────── */
 function Dashboard({ entradas, detalles, detalleSalidas, mantenimientos, equipo }) {
-  const today = new Date().toISOString().split('T')[0];
-
-  const ventasHoy = useMemo(() => {
-    const ids = new Set(
-      detalleSalidas
-        .filter(ds => {
-          // We check the salida's fecha — approximate by looking at detalle
-          return true; // done via parent joining below
-        })
-        .map(ds => ds.id)
-    );
-    return 0; // calculated below
-  }, [detalleSalidas]);
-
   const ventasHoyTotal = useMemo(() => {
     return detalleSalidas.reduce((sum, ds) => sum + (ds.precio_dia * ds.cantidad_vendida || 0), 0);
   }, [detalleSalidas]);
@@ -187,15 +219,19 @@ function TabNav({ tabs, active, onChange }) {
 
 /* ─── Root App ─────────────────── */
 export default function App() {
-  const { user, userData, activeTenant, setActiveTenant } = useAuth();
+  const { user, userData, activeTenant, setActiveTenant, logout } = useAuth();
   const isAdmin = userData?.rol === 'admin';
   const [activeTab, setActiveTab] = useState('dashboard');
 
   // Update default tab based on role once userData is loaded
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeTenant && activeTab === 'admin') setActiveTab('dashboard');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     else if (!activeTenant && isAdmin) setActiveTab('admin');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     else if (!isAdmin && user && activeTab === 'admin') setActiveTab('dashboard');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, user, activeTenant]);
 
   const [subTab, setSubTab] = useState({
@@ -219,6 +255,36 @@ export default function App() {
 
   if (!user) return <Login />;
 
+  // SUBSCRIPTION BLOCKING LOGIC
+  const isTenant = userData?.rol === 'tenant';
+  const isInactive = isTenant && userData?.status !== 'active';
+  const expirationDate = userData?.vencimiento ? new Date(userData.vencimiento) : null;
+  const isExpired = expirationDate && expirationDate < new Date(new Date().setHours(0, 0, 0, 0));
+
+  if (isTenant && (isInactive || isExpired)) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+        <Card className="max-w-md w-full text-center space-y-6 py-10">
+          <div className="bg-red-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-10 h-10 text-red-600" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Suscripción Inactiva</h1>
+            <p className="text-slate-500 mt-2">
+              Tu acceso al sistema ha sido suspendido o tu plan ha vencido ({userData?.vencimiento || 'Sin fecha'}).
+            </p>
+          </div>
+          <p className="text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200">
+            Para reactivar tu cuenta, por favor contacta al administrador del sistema o realiza el pago de tu anualidad/mensualidad.
+          </p>
+          <Button variant="outline" className="w-full" onClick={() => logout()}>
+            Cerrar Sesión
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
       {/* Sidebar */}
@@ -231,6 +297,9 @@ export default function App() {
             <p className="text-base font-bold text-white leading-tight">Tunas</p>
             <p className="text-xs text-slate-400">Sweeper System</p>
           </div>
+          <button onClick={() => logout()} className="md:hidden ml-auto p-2 text-slate-400">
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
 
         <nav className="p-3 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-visible flex-1">
@@ -256,12 +325,21 @@ export default function App() {
 
         <div className="hidden md:block mt-auto p-4 border-t border-slate-800">
           {!isAdmin && <NavItem icon={User} label="Mi Cuenta" active={activeTab === 'cuenta'} onClick={() => setActiveTab('cuenta')} />}
+          <button
+            onClick={() => logout()}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all w-full text-left text-red-400 hover:bg-red-500/10 mt-2"
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0" />
+            <span className="font-medium">Cerrar Sesión</span>
+          </button>
           <p className="text-xs text-slate-500 mt-4 px-2">Barredora de Tunas © 2026</p>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        <MarketTicker variedades={variedades} />
+
         {activeTenant && (
           <div className="bg-orange-600 text-white px-4 md:px-8 py-3 flex justify-between items-center shadow-md z-10">
             <span className="font-medium text-sm flex items-center">

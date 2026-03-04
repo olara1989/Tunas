@@ -42,7 +42,7 @@ export function AccountModule() {
         <div className="max-w-3xl space-y-6">
             <div className="flex justify-between items-center">
                 <SectionHeader title="Mi Cuenta y Bodega" />
-                <Button variant="danger" onClick={logout} className="text-sm px-4 py-2">
+                <Button variant="danger" onClick={() => logout()} className="text-sm px-4 py-2">
                     <LogOut className="w-4 h-4 mr-2" /> Cerrar Sesión
                 </Button>
             </div>

@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
@@ -13,6 +13,11 @@ const firebaseConfig = {
     measurementId: "G-XN1WYDN2XZ"
 };
 
+// Initialize primary Firebase
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+
+// Initialize Secondary Firebase App (used ONLY by Admin to create new tenant accounts without logging out)
+const secondaryApp = getApps().length === 1 ? initializeApp(firebaseConfig, "Secondary") : getApps().find(a => a.name === "Secondary");
+export const secondaryAuth = getAuth(secondaryApp);

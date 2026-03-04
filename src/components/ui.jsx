@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React from 'react';
 import { AlertCircle, X, Loader2 } from 'lucide-react';
 

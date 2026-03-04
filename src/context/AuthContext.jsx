@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -21,18 +22,33 @@ export const AuthProvider = ({ children }) => {
                 const docRef = doc(db, 'usuarios', currentUser.uid);
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
-                    setUserData(docSnap.data());
+                    const data = docSnap.data();
+                    // Merge missing fields if it's an old document (e.g. from Horacio)
+                    if (currentUser.email === 'horacio@gmail.com' && !data.status) {
+                        const updated = {
+                            ...data,
+                            status: 'active',
+                            plan: 'mensual',
+                            vencimiento: '2026-12-31',
+                            tenant_id: data.tenant_id || 'tunas-sweeper'
+                        };
+                        await setDoc(docRef, updated, { merge: true });
+                        setUserData(updated);
+                    } else {
+                        setUserData(data);
+                    }
                 } else {
                     // Auto-bootstrap specific users if they don't have a document yet
                     const email = currentUser.email;
                     let initialData = null;
                     if (email === 'horacio@gmail.com') {
-                        initialData = { email, rol: 'tenant', tenant_id: 'tunas-sweeper', bodega_info: {} };
+                        initialData = { email, rol: 'tenant', tenant_id: 'tunas-sweeper', bodega_info: {}, status: 'active', plan: 'mensual', vencimiento: '2026-12-31' };
                     } else if (email === 'olara@utzac.edu.mx') {
                         initialData = { email, rol: 'admin' };
                     } else {
                         // Default to tenant with a new isolated tenant ID (using uid)
-                        initialData = { email, rol: 'tenant', tenant_id: currentUser.uid, bodega_info: {} };
+                        // Make active by default with a default expiration date
+                        initialData = { email, rol: 'tenant', tenant_id: currentUser.uid, bodega_info: {}, status: 'active', plan: 'mensual', vencimiento: '2026-12-31' };
                     }
 
                     if (initialData) {

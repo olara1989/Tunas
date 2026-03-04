@@ -27,6 +27,7 @@ export function useFirestore(collectionName) {
     };
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (!tenantId) {
             setData([]);
             setLoading(false);
@@ -53,6 +54,7 @@ export function useFirestore(collectionName) {
         }
 
         return () => { if (unsubscribe) unsubscribe(); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [collectionName, tenantId]);
 
     const addNode = async (newData) => {
