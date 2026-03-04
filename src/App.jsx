@@ -1,14 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   LayoutDashboard, Tractor, PackageSearch,
-  Wrench, Settings, Sprout, TrendingUp, ShoppingCart, AlertTriangle
+  Wrench, Settings, Sprout, TrendingUp, ShoppingCart, AlertTriangle, ShieldCheck, User
 } from 'lucide-react';
+import { useAuth } from './context/AuthContext';
 import { useFirestore } from './hooks/useFirestore';
 import { Card, cn, Spinner } from './components/ui';
 import { ProductoresManager, ClientesManager, VariedadesManager } from './components/ConfigModules';
 import { HuertasSection, ManejosSection } from './components/ProduccionModules';
 import { EquipoSection, MantenimientosSection } from './components/EquiposModules';
 import { EntradasSection, ConsolidadorSection, SalidasSection } from './components/BodegaModules';
+import Login from './components/Login';
+import { AccountModule } from './components/AccountModule';
+import { AdminModules } from './components/AdminModules';
 
 
 /* ─── Nav Item ─────────────────── */
@@ -183,7 +187,17 @@ function TabNav({ tabs, active, onChange }) {
 
 /* ─── Root App ─────────────────── */
 export default function App() {
+  const { user, userData, activeTenant, setActiveTenant } = useAuth();
+  const isAdmin = userData?.rol === 'admin';
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Update default tab based on role once userData is loaded
+  useEffect(() => {
+    if (activeTenant && activeTab === 'admin') setActiveTab('dashboard');
+    else if (!activeTenant && isAdmin) setActiveTab('admin');
+    else if (!isAdmin && user && activeTab === 'admin') setActiveTab('dashboard');
+  }, [isAdmin, user, activeTenant]);
+
   const [subTab, setSubTab] = useState({
     produccion: 'huertas',
     bodega: 'entradas',
@@ -203,6 +217,8 @@ export default function App() {
 
   const setTab = (module, tab) => setSubTab(p => ({ ...p, [module]: tab }));
 
+  if (!user) return <Login />;
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
       {/* Sidebar */}
@@ -217,85 +233,121 @@ export default function App() {
           </div>
         </div>
 
-        <nav className="p-3 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-visible">
-          <NavItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          <NavItem icon={Tractor} label="Producción" active={activeTab === 'produccion'} onClick={() => setActiveTab('produccion')} />
-          <NavItem icon={PackageSearch} label="Bodega" active={activeTab === 'bodega'} onClick={() => setActiveTab('bodega')} />
-          <NavItem icon={Wrench} label="Equipos" active={activeTab === 'equipos'} onClick={() => setActiveTab('equipos')} />
-          <NavItem icon={Settings} label="Configuración" active={activeTab === 'config'} onClick={() => setActiveTab('config')} />
+        <nav className="p-3 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-visible flex-1">
+          {isAdmin && (
+            <NavItem
+              icon={ShieldCheck}
+              label="Super Admin"
+              active={activeTab === 'admin' && !activeTenant}
+              onClick={() => { setActiveTenant(null); setActiveTab('admin'); }}
+            />
+          )}
+
+          {(!isAdmin || activeTenant) && (
+            <>
+              <NavItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+              <NavItem icon={Tractor} label="Producción" active={activeTab === 'produccion'} onClick={() => setActiveTab('produccion')} />
+              <NavItem icon={PackageSearch} label="Bodega" active={activeTab === 'bodega'} onClick={() => setActiveTab('bodega')} />
+              <NavItem icon={Wrench} label="Equipos" active={activeTab === 'equipos'} onClick={() => setActiveTab('equipos')} />
+              <NavItem icon={Settings} label="Configuración" active={activeTab === 'config'} onClick={() => setActiveTab('config')} />
+            </>
+          )}
         </nav>
 
         <div className="hidden md:block mt-auto p-4 border-t border-slate-800">
-          <p className="text-xs text-slate-500">Barredora de Tunas © 2026</p>
+          {!isAdmin && <NavItem icon={User} label="Mi Cuenta" active={activeTab === 'cuenta'} onClick={() => setActiveTab('cuenta')} />}
+          <p className="text-xs text-slate-500 mt-4 px-2">Barredora de Tunas © 2026</p>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-        {activeTab === 'dashboard' && (
-          <Dashboard
-            entradas={entradas} detalles={detalles}
-            detalleSalidas={detalleSalidas} mantenimientos={mantenimientos} equipo={equipo}
-          />
-        )}
-
-        {activeTab === 'produccion' && (
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 mb-5">Producción</h1>
-            <TabNav
-              tabs={[{ key: 'huertas', label: 'Huertas' }, { key: 'manejos', label: 'Manejos de Campo' }]}
-              active={subTab.produccion} onChange={t => setTab('produccion', t)}
-            />
-            {subTab.produccion === 'huertas' && <HuertasSection variedades={variedades} />}
-            {subTab.produccion === 'manejos' && <ManejosSection huertas={huertas} variedades={variedades} />}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {activeTenant && (
+          <div className="bg-orange-600 text-white px-4 md:px-8 py-3 flex justify-between items-center shadow-md z-10">
+            <span className="font-medium text-sm flex items-center">
+              <AlertTriangle className="w-5 h-5 mr-3 flex-shrink-0" />
+              <span>
+                Vista Administrador — Gestionando a: <strong className="ml-1">{activeTenant.email}</strong> {activeTenant.nombre ? `(${activeTenant.nombre})` : ''}
+              </span>
+            </span>
+            <button
+              className="bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors ml-4 whitespace-nowrap"
+              onClick={() => { setActiveTenant(null); setActiveTab('admin'); }}
+            >
+              Cerrar Gestión
+            </button>
           </div>
         )}
 
-        {activeTab === 'bodega' && (
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 mb-5">Bodega & Ventas</h1>
-            <TabNav
-              tabs={[
-                { key: 'entradas', label: 'Entradas' },
-                { key: 'consolidador', label: 'Consolidador de Carga' },
-                { key: 'salidas', label: 'Historial Salidas' },
-              ]}
-              active={subTab.bodega} onChange={t => setTab('bodega', t)}
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+          {activeTab === 'dashboard' && (
+            <Dashboard
+              entradas={entradas} detalles={detalles}
+              detalleSalidas={detalleSalidas} mantenimientos={mantenimientos} equipo={equipo}
             />
-            {subTab.bodega === 'entradas' && <EntradasSection productores={productores} variedades={variedades} />}
-            {subTab.bodega === 'consolidador' && <ConsolidadorSection clientes={clientes} variedades={variedades} />}
-            {subTab.bodega === 'salidas' && <SalidasSection clientes={clientes} variedades={variedades} />}
-          </div>
-        )}
+          )}
 
-        {activeTab === 'equipos' && (
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 mb-5">Equipos & Maquinaria</h1>
-            <TabNav
-              tabs={[{ key: 'equipos', label: 'Equipos' }, { key: 'historial', label: 'Historial Mantenimientos' }]}
-              active={subTab.equipos} onChange={t => setTab('equipos', t)}
-            />
-            {subTab.equipos === 'equipos' && <EquipoSection />}
-            {subTab.equipos === 'historial' && <MantenimientosSection />}
-          </div>
-        )}
+          {activeTab === 'produccion' && (
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 mb-5">Producción</h1>
+              <TabNav
+                tabs={[{ key: 'huertas', label: 'Huertas' }, { key: 'manejos', label: 'Manejos de Campo' }]}
+                active={subTab.produccion} onChange={t => setTab('produccion', t)}
+              />
+              {subTab.produccion === 'huertas' && <HuertasSection variedades={variedades} />}
+              {subTab.produccion === 'manejos' && <ManejosSection huertas={huertas} variedades={variedades} />}
+            </div>
+          )}
 
-        {activeTab === 'config' && (
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 mb-5">Configuración</h1>
-            <TabNav
-              tabs={[
-                { key: 'productores', label: 'Productores' },
-                { key: 'clientes', label: 'Clientes' },
-                { key: 'variedades', label: 'Variedades' },
-              ]}
-              active={subTab.config} onChange={t => setTab('config', t)}
-            />
-            {subTab.config === 'productores' && <ProductoresManager />}
-            {subTab.config === 'clientes' && <ClientesManager />}
-            {subTab.config === 'variedades' && <VariedadesManager />}
-          </div>
-        )}
+          {activeTab === 'bodega' && (
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 mb-5">Bodega & Ventas</h1>
+              <TabNav
+                tabs={[
+                  { key: 'entradas', label: 'Entradas' },
+                  { key: 'consolidador', label: 'Consolidador de Carga' },
+                  { key: 'salidas', label: 'Historial Salidas' },
+                ]}
+                active={subTab.bodega} onChange={t => setTab('bodega', t)}
+              />
+              {subTab.bodega === 'entradas' && <EntradasSection productores={productores} variedades={variedades} />}
+              {subTab.bodega === 'consolidador' && <ConsolidadorSection clientes={clientes} variedades={variedades} />}
+              {subTab.bodega === 'salidas' && <SalidasSection clientes={clientes} variedades={variedades} />}
+            </div>
+          )}
+
+          {activeTab === 'equipos' && (
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 mb-5">Equipos & Maquinaria</h1>
+              <TabNav
+                tabs={[{ key: 'equipos', label: 'Equipos' }, { key: 'historial', label: 'Historial Mantenimientos' }]}
+                active={subTab.equipos} onChange={t => setTab('equipos', t)}
+              />
+              {subTab.equipos === 'equipos' && <EquipoSection />}
+              {subTab.equipos === 'historial' && <MantenimientosSection />}
+            </div>
+          )}
+
+          {activeTab === 'config' && !isAdmin && (
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 mb-5">Configuración</h1>
+              <TabNav
+                tabs={[
+                  { key: 'productores', label: 'Productores' },
+                  { key: 'clientes', label: 'Clientes' },
+                  { key: 'variedades', label: 'Variedades' },
+                ]}
+                active={subTab.config} onChange={t => setTab('config', t)}
+              />
+              {subTab.config === 'productores' && <ProductoresManager />}
+              {subTab.config === 'clientes' && <ClientesManager />}
+              {subTab.config === 'variedades' && <VariedadesManager />}
+            </div>
+          )}
+
+          {activeTab === 'cuenta' && !isAdmin && <AccountModule />}
+          {activeTab === 'admin' && isAdmin && !activeTenant && <AdminModules />}
+        </div>
       </main>
     </div>
   );

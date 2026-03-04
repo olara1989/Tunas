@@ -1,0 +1,82 @@
+import React, { useState } from 'react';
+import { Leaf, LogIn } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Card, Input, Button, ErrorBanner } from './ui';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebase';
+
+export default function Login() {
+    const { login } = useAuth();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            await login(email, password);
+        } catch (err) {
+            // If user not found, let's auto-register them for demo purposes
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+                try {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                    // The onAuthStateChanged in AuthContext will catch this and bootstrap them
+                } catch (regErr) {
+                    setError('Credenciales inválidas o error de registro: ' + regErr.message);
+                }
+            } else {
+                setError(err.message);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+            <div className="sm:mx-auto sm:w-full sm:max-w-md">
+                <div className="flex justify-center">
+                    <div className="w-16 h-16 bg-green-600 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-6">
+                        <Leaf className="w-10 h-10 text-white transform rotate-6" />
+                    </div>
+                </div>
+                <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900">
+                    Tunas Sweeper
+                </h2>
+                <p className="mt-2 text-center text-sm text-slate-600">
+                    Sistema Integral de Gestión SaaS
+                </p>
+            </div>
+
+            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+                <Card className="px-4 py-8 sm:px-10">
+                    <form className="space-y-6" onSubmit={handleSubmit}>
+                        <ErrorBanner error={error} />
+
+                        <Input
+                            label="Correo Electrónico"
+                            type="email"
+                            required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                        />
+                        <Input
+                            label="Contraseña"
+                            type="password"
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                        />
+
+                        <Button type="submit" className="w-full py-2.5" loading={loading}>
+                            <LogIn className="w-4 h-4 mr-2" /> Iniciar Sesión / Registrarse
+                        </Button>
+                    </form>
+                </Card>
+            </div>
+        </div>
+    );
+}

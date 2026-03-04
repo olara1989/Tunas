@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 
 // Firebase project config — replace with real values when deploying
 const firebaseConfig = {
@@ -16,15 +16,3 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-
-let authInitialized = false;
-export const ensureAnonymousAuth = async () => {
-    if (authInitialized || auth.currentUser) return;
-    try {
-        await signInAnonymously(auth);
-        authInitialized = true;
-    } catch (error) {
-        console.warn("Anonymous auth failed:", error.code, error.message);
-        // Allow app to work in demo mode without auth if project isn't configured
-    }
-};
