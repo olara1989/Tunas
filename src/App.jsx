@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   LayoutDashboard, Tractor, PackageSearch,
-  Wrench, Settings, Sprout, TrendingUp, ShoppingCart, AlertTriangle, ShieldCheck, User, LogOut,
+  Wrench, Settings, TrendingUp, ShoppingCart, AlertTriangle, ShieldCheck, User, LogOut,
   ArrowUpRight, ArrowDownRight
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
@@ -138,7 +138,7 @@ function Dashboard({ entradas, detalles, detalleSalidas, mantenimientos, equipo 
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-sm text-slate-500 mt-1">Sistema Integral · Barredora de Tunas</p>
+        <p className="text-sm text-slate-500 mt-1">Sistema Integral · Harvest Pro</p>
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -290,12 +290,12 @@ export default function App() {
       {/* Sidebar */}
       <aside className="w-full md:w-60 bg-slate-900 text-slate-300 flex flex-col flex-shrink-0 z-10 shadow-xl">
         <div className="p-5 border-b border-slate-800 flex items-center gap-3">
-          <div className="p-2 bg-green-600 rounded-xl">
-            <Sprout className="w-6 h-6 text-white" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white flex-shrink-0">
+            <img src="/logo.png" alt="Harvest Pro" className="w-full h-full object-contain" />
           </div>
           <div>
-            <p className="text-base font-bold text-white leading-tight">Tunas</p>
-            <p className="text-xs text-slate-400">Sweeper System</p>
+            <p className="text-base font-bold text-white leading-tight">Harvest Pro</p>
+            <p className="text-xs text-slate-400 font-medium">Gestión Integral</p>
           </div>
           <button onClick={() => logout()} className="md:hidden ml-auto p-2 text-slate-400">
             <LogOut className="w-5 h-5" />
@@ -332,7 +332,7 @@ export default function App() {
             <LogOut className="w-5 h-5 flex-shrink-0" />
             <span className="font-medium">Cerrar Sesión</span>
           </button>
-          <p className="text-xs text-slate-500 mt-4 px-2">Barredora de Tunas © 2026</p>
+          <p className="text-xs text-slate-500 mt-4 px-2">Harvest Pro © 2026</p>
         </div>
       </aside>
 

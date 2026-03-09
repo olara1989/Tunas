@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Leaf, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Card, Input, Button, ErrorBanner } from './ui';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -39,15 +39,15 @@ export default function Login() {
         <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
                 <div className="flex justify-center">
-                    <div className="w-16 h-16 bg-green-600 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-6">
-                        <Leaf className="w-10 h-10 text-white transform rotate-6" />
+                    <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-xl overflow-hidden p-2">
+                        <img src="/logo.png" alt="Harvest Pro" className="w-full h-full object-contain" />
                     </div>
                 </div>
                 <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900">
-                    Tunas Sweeper
+                    Harvest Pro
                 </h2>
                 <p className="mt-2 text-center text-sm text-slate-600">
-                    Sistema Integral de Gestión SaaS
+                    Gestión Integral Agrícola
                 </p>
             </div>
 
