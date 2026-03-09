@@ -10,6 +10,7 @@ import {
 export function EntradasSection({ productores, variedades }) {
     const { data: entradas, loading, error, addNode, updateNode } = useFirestore('registro_entradas');
     const { data: detalles, addNode: addDetalle } = useFirestore('detalle_entradas');
+    const [entradaModal, setEntradaModal] = useState(false);
     const [loteModal, setLoteModal] = useState(null); // entradaId
     const [form, setForm] = useState({});
     const [lForm, setLForm] = useState({});

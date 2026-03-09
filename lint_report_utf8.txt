@@ -1,0 +1,13 @@
+﻿
+C:\Users\omar_\Documents\Tunas\src\App.jsx
+   65:26  error    'Icon' is defined but never used                                                                    no-unused-vars
+  228:5   warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/set-state-in-effect')
+  230:5   warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/set-state-in-effect')
+  232:5   warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/set-state-in-effect')
+
+C:\Users\omar_\Documents\Tunas\src\components\BodegaModules.jsx
+  182:19  error  'entradas' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+Ô£û 5 problems (2 errors, 3 warnings)
+  0 errors and 3 warnings potentially fixable with the `--fix` option.
+
