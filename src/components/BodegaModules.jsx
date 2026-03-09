@@ -6,14 +6,13 @@ import {
     ErrorBanner, SuccessBanner, EmptyState, Spinner, SectionHeader, StatusBadge, cn
 } from './ui';
 
-/* ── Entradas (Recepciones de Tarimas) ── */
+/* ── Entradas (Recepciones de Lotes) ── */
 export function EntradasSection({ productores, variedades }) {
     const { data: entradas, loading, error, addNode, updateNode } = useFirestore('registro_entradas');
     const { data: detalles, addNode: addDetalle } = useFirestore('detalle_entradas');
-    const [entradaModal, setEntradaModal] = useState(false);
-    const [tarimaModal, setTarimaModal] = useState(null); // entradaId
+    const [loteModal, setLoteModal] = useState(null); // entradaId
     const [form, setForm] = useState({});
-    const [tForm, setTForm] = useState({});
+    const [lForm, setLForm] = useState({});
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState('');
     const [success, setSuccess] = useState('');
@@ -28,20 +27,22 @@ export function EntradasSection({ productores, variedades }) {
         finally { setSaving(false); }
     };
 
-    const handleSaveTarima = async () => {
-        if (!tForm.variedad_id || !tForm.tarima_no || !tForm.cantidad_recibida) {
-            setFormError('Variedad, # tarima y cantidad son requeridos.'); return;
+    const handleSaveLote = async () => {
+        if (!lForm.variedad_id || !lForm.cantidad_recibida) {
+            setFormError('Variedad y cantidad son requeridos.'); return;
         }
         setSaving(true); setFormError('');
         try {
+            const lastLote = detalles.reduce((max, d) => Math.max(max, Number(d.tarima_no) || 0), 0);
             await addDetalle({
-                registro_entrada_id: tarimaModal,
-                ...tForm,
+                registro_entrada_id: loteModal,
+                ...lForm,
+                tarima_no: lastLote + 1,
                 cantidad_vendida: 0,
                 merma: 0,
                 status: 'almacenada',
             });
-            setTarimaModal(null); setSuccess('Tarima registrada.'); setTimeout(() => setSuccess(''), 3000);
+            setLoteModal(null); setSuccess('Lote registrado.'); setTimeout(() => setSuccess(''), 3000);
         } catch (e) { setFormError(e.message); }
         finally { setSaving(false); }
     };
@@ -69,12 +70,21 @@ export function EntradasSection({ productores, variedades }) {
                                             <p className="font-semibold text-slate-900">{prod?.nombre || 'Productor eliminado'}</p>
                                             <StatusBadge status={e.status} />
                                         </div>
-                                        <p className="text-sm text-slate-500">📅 {e.fecha} · {ds.length} tarima(s)</p>
+                                        <p className="text-sm text-slate-500">📅 {e.fecha} · {ds.length} lote(s)</p>
                                         <p className="text-sm text-slate-500">Monto productor: <span className="font-semibold text-green-700">${(e.monto_total_productor || 0).toFixed(2)}</span></p>
                                     </div>
                                     <div className="flex gap-2">
-                                        <Button variant="outline" className="text-sm" onClick={() => { setTForm({ presentacion: variedades[0]?.presentacion_default || '' }); setFormError(''); setTarimaModal(e.id); }}>
-                                            <Plus className="w-4 h-4" /> Tarima
+                                        <Button variant="outline" className="text-sm" onClick={() => {
+                                            const v0 = variedades[0];
+                                            setLForm({
+                                                presentacion: v0?.presentacion_default || '',
+                                                variedad_id: v0?.id || '',
+                                                precio_venta_sugerido: v0?.precio_compra || 0
+                                            });
+                                            setFormError('');
+                                            setLoteModal(e.id);
+                                        }}>
+                                            <Plus className="w-4 h-4" /> Lote
                                         </Button>
                                         {e.status === 'pendiente' && (
                                             <Button variant="yellow" className="text-sm" onClick={() => updateNode(e.id, { status: 'pagado' })}>
@@ -88,7 +98,7 @@ export function EntradasSection({ productores, variedades }) {
                                         <table className="w-full text-sm min-w-[500px]">
                                             <thead>
                                                 <tr className="text-xs text-slate-400 uppercase">
-                                                    <th className="text-left pb-2">Tarima #</th>
+                                                    <th className="text-left pb-2">Lote #</th>
                                                     <th className="text-left pb-2">Variedad</th>
                                                     <th className="text-right pb-2">Recibido</th>
                                                     <th className="text-right pb-2">Vendido</th>
@@ -130,26 +140,34 @@ export function EntradasSection({ productores, variedades }) {
                 </div>
             </Modal>
 
-            {/* Modal nueva tarima */}
-            <Modal open={!!tarimaModal} onClose={() => setTarimaModal(null)} title="Agregar Tarima">
+            {/* Modal nuevo lote */}
+            <Modal open={!!loteModal} onClose={() => setLoteModal(null)} title="Agregar Lote">
                 <div className="space-y-4">
                     <ErrorBanner error={formError} />
-                    <Input label="# Tarima" value={tForm.tarima_no || ''} onChange={e => setTForm(p => ({ ...p, tarima_no: e.target.value }))} />
-                    <Select label="Variedad" options={variedades.map(v => ({ value: v.id, label: v.nombre }))} value={tForm.variedad_id || ''} onChange={e => setTForm(p => ({ ...p, variedad_id: e.target.value }))} />
-                    <Input label="Cantidad recibida (cajas)" type="number" value={tForm.cantidad_recibida || ''} onChange={e => setTForm(p => ({ ...p, cantidad_recibida: Number(e.target.value) }))} />
+                    <Select
+                        label="Variedad"
+                        options={variedades.map(v => ({ value: v.id, label: v.nombre }))}
+                        value={lForm.variedad_id || ''}
+                        onChange={e => {
+                            const vId = e.target.value;
+                            const v = variedades.find(x => x.id === vId);
+                            setLForm(p => ({ ...p, variedad_id: vId, precio_venta_sugerido: v?.precio_compra || 0 }));
+                        }}
+                    />
+                    <Input label="Cantidad recibida (cajas)" type="number" value={lForm.cantidad_recibida || ''} onChange={e => setLForm(p => ({ ...p, cantidad_recibida: Number(e.target.value) }))} />
                     <RadioGroup
                         label="Presentación"
                         options={[
                             { value: 'Caja', label: 'Caja', icon: '📦' },
                             { value: 'Kilo', label: 'Kilo', icon: '⚖️' }
                         ]}
-                        value={tForm.presentacion || ''}
-                        onChange={val => setTForm(p => ({ ...p, presentacion: val }))}
+                        value={lForm.presentacion || ''}
+                        onChange={val => setLForm(p => ({ ...p, presentacion: val }))}
                     />
-                    <Input label="Precio sugerido de venta ($)" type="number" value={tForm.precio_venta_sugerido || ''} onChange={e => setTForm(p => ({ ...p, precio_venta_sugerido: Number(e.target.value) }))} />
+                    <Input label="Precio sugerido de venta ($)" type="number" value={lForm.precio_venta_sugerido || ''} onChange={e => setLForm(p => ({ ...p, precio_venta_sugerido: Number(e.target.value) }))} />
                     <div className="flex justify-end gap-2 pt-2">
-                        <Button variant="secondary" onClick={() => setTarimaModal(null)}>Cancelar</Button>
-                        <Button loading={saving} onClick={handleSaveTarima}>Agregar Tarima</Button>
+                        <Button variant="secondary" onClick={() => setLoteModal(null)}>Cancelar</Button>
+                        <Button loading={saving} onClick={handleSaveLote}>Agregar Lote</Button>
                     </div>
                 </div>
             </Modal>
@@ -157,7 +175,7 @@ export function EntradasSection({ productores, variedades }) {
     );
 }
 
-/* ── Consolidador de Carga (Carrito de Salida) ── */
+/* ── Registra Barrida/Venta (Carrito de Salida) ── */
 export function ConsolidadorSection({ clientes, variedades }) {
     const { data: detalles, updateNode: updateDetalle } = useFirestore('detalle_entradas');
     const { data: entradas } = useFirestore('registro_entradas');
@@ -182,7 +200,7 @@ export function ConsolidadorSection({ clientes, variedades }) {
     const addToCart = (det) => {
         if (inCart(det.id)) return;
         const variedad = variedades.find(v => v.id === det.variedad_id);
-        setCart(p => [...p, { detalle: det, cantidad: det.cantidad_recibida - det.cantidad_vendida - det.merma, precio_dia: variedad?.precio_venta || 0 }]);
+        setCart(p => [...p, { detalle: det, cantidad: det.cantidad_recibida - det.cantidad_vendida - det.merma, precio_dia: det.precio_venta_sugerido || variedad?.precio_venta || 0 }]);
     };
 
     const removeFromCart = (id) => setCart(p => p.filter(c => c.detalle.id !== id));
@@ -193,7 +211,7 @@ export function ConsolidadorSection({ clientes, variedades }) {
 
     const handleRegistrarSalida = async () => {
         if (!clienteId) { setError('Selecciona un cliente.'); return; }
-        if (cart.length === 0) { setError('Agrega al menos una tarima al carrito.'); return; }
+        if (cart.length === 0) { setError('Agrega al menos un lote al carrito.'); return; }
         setSaving(true); setError('');
         try {
             // Create registro_salida
@@ -208,7 +226,7 @@ export function ConsolidadorSection({ clientes, variedades }) {
                     cantidad_vendida: item.cantidad,
                     precio_dia: item.precio_dia,
                 });
-                // Update tarima
+                // Update lote
                 const newVendido = item.detalle.cantidad_vendida + item.cantidad;
                 const disponible = item.detalle.cantidad_recibida - newVendido - item.detalle.merma;
                 await updateDetalle(item.detalle.id, {
@@ -216,7 +234,7 @@ export function ConsolidadorSection({ clientes, variedades }) {
                     status: disponible <= 0 ? 'en_proceso' : 'en_proceso',
                 });
                 // Recalculate monto_total_productor on parent entrada
-                // (done in real usage by querying all detalle_salidas for that entrada's tarimas)
+                // (done in real usage by querying all detalle_salidas for that entrada's lotes)
             }
 
             setCart([]); setClienteId(''); setSuccess('¡Salida registrada exitosamente!');
@@ -227,15 +245,15 @@ export function ConsolidadorSection({ clientes, variedades }) {
 
     return (
         <div className="space-y-4">
-            <SectionHeader title="Consolidador de Carga" />
+            <SectionHeader title="Registra Barrida/Venta" />
             <ErrorBanner error={error} /><SuccessBanner message={success} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left: available tarimas */}
+                {/* Left: available lotes */}
                 <div>
-                    <p className="text-sm font-semibold text-slate-600 mb-3">Tarimas disponibles ({disponibles.length})</p>
+                    <p className="text-sm font-semibold text-slate-600 mb-3">Lotes disponibles ({disponibles.length})</p>
                     <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-                        {disponibles.length === 0 && <EmptyState icon={PackageSearch} message="No hay tarimas disponibles" />}
+                        {disponibles.length === 0 && <EmptyState icon={PackageSearch} message="No hay lotes disponibles" />}
                         {disponibles.map(d => {
                             const variedad = variedades.find(v => v.id === d.variedad_id);
                             const disponible = d.cantidad_recibida - d.cantidad_vendida - d.merma;
@@ -246,7 +264,7 @@ export function ConsolidadorSection({ clientes, variedades }) {
                                     already ? "bg-green-50 border-green-200 opacity-60" : "bg-white border-slate-200 hover:border-green-300 hover:bg-green-50"
                                 )} onClick={() => !already && addToCart(d)}>
                                     <div>
-                                        <p className="font-mono text-sm font-semibold text-slate-800">Tarima #{d.tarima_no}</p>
+                                        <p className="font-mono text-sm font-semibold text-slate-800">Lote #{d.tarima_no}</p>
                                         <p className="text-xs text-slate-500">{variedad?.nombre} · {d.presentacion}</p>
                                         <p className="text-xs text-slate-400">Disponible: <strong>{disponible} cajas</strong></p>
                                     </div>
@@ -268,11 +286,11 @@ export function ConsolidadorSection({ clientes, variedades }) {
 
                     <div className="flex flex-col gap-2">
                         <p className="text-sm font-semibold text-slate-600">Carrito ({cart.length})</p>
-                        {cart.length === 0 && <p className="text-sm text-slate-400 py-6 text-center border-2 border-dashed border-slate-200 rounded-xl">Selecciona tarimas de la izquierda</p>}
+                        {cart.length === 0 && <p className="text-sm text-slate-400 py-6 text-center border-2 border-dashed border-slate-200 rounded-xl">Selecciona lotes de la izquierda</p>}
                         {cart.map(item => (
                             <div key={item.detalle.id} className="bg-slate-50 rounded-xl p-3 border border-slate-200">
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="font-mono text-sm font-semibold">Tarima #{item.detalle.tarima_no}</span>
+                                    <span className="font-mono text-sm font-semibold">Lote #{item.detalle.tarima_no}</span>
                                     <button onClick={() => removeFromCart(item.detalle.id)} className="text-red-400 hover:text-red-600">
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -338,7 +356,7 @@ export function SalidasSection({ clientes }) {
                                         <table className="w-full text-sm min-w-[400px]">
                                             <thead>
                                                 <tr className="text-xs text-slate-400 uppercase">
-                                                    <th className="text-left pb-2">Tarima</th>
+                                                    <th className="text-left pb-2">Lote</th>
                                                     <th className="text-right pb-2">Cantidad</th>
                                                     <th className="text-right pb-2">Precio/caja</th>
                                                     <th className="text-right pb-2">Subtotal</th>

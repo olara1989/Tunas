@@ -85,7 +85,7 @@ function Dashboard({ entradas, detalles, detalleSalidas, mantenimientos, equipo 
     return detalleSalidas.reduce((sum, ds) => sum + (ds.precio_dia * ds.cantidad_vendida || 0), 0);
   }, [detalleSalidas]);
 
-  const tarimasEnInventario = useMemo(() =>
+  const lotesEnInventario = useMemo(() =>
     detalles.filter(d => d.status === 'almacenada' || d.status === 'en_proceso').length,
     [detalles]
   );
@@ -112,9 +112,9 @@ function Dashboard({ entradas, detalles, detalleSalidas, mantenimientos, equipo 
       color: "bg-green-50 text-green-600",
     },
     {
-      label: "Tarimas en Bodega",
-      value: tarimasEnInventario,
-      sub: `${detalles.filter(d => d.status === 'almacenada').length} almacenadas`,
+      label: "Lotes en Bodega",
+      value: lotesEnInventario,
+      sub: `${detalles.filter(d => d.status === 'almacenada').length} almacenados`,
       icon: PackageSearch,
       color: "bg-blue-50 text-blue-600",
     },
@@ -179,9 +179,9 @@ function Dashboard({ entradas, detalles, detalleSalidas, mantenimientos, equipo 
         </Card>
       )}
 
-      {/* Recent tarimas */}
+      {/* Recent lotes */}
       <Card>
-        <h3 className="font-semibold text-slate-900 mb-3">Estado de Tarimas</h3>
+        <h3 className="font-semibold text-slate-900 mb-3">Estado de Lotes</h3>
         <div className="grid grid-cols-3 gap-4 text-center">
           {['almacenada', 'en_proceso', 'completa'].map(st => {
             const count = detalles.filter(d => d.status === st).length;
@@ -383,7 +383,7 @@ export default function App() {
               <TabNav
                 tabs={[
                   { key: 'entradas', label: 'Entradas' },
-                  { key: 'consolidador', label: 'Consolidador de Carga' },
+                  { key: 'consolidador', label: 'Registra Barrida/Venta' },
                   { key: 'salidas', label: 'Historial Salidas' },
                 ]}
                 active={subTab.bodega} onChange={t => setTab('bodega', t)}
