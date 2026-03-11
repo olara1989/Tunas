@@ -1,6 +1,76 @@
-/* eslint-disable react-refresh/only-export-components */
 import React from 'react';
-import { AlertCircle, X, Loader2 } from 'lucide-react';
+import { AlertCircle, X, Loader2, Search } from 'lucide-react';
+
+export function SearchableSelect({ label, options = [], value, onChange, placeholder = "-- Seleccionar --", className }) {
+    const [search, setSearch] = React.useState('');
+    const [isOpen, setIsOpen] = React.useState(false);
+
+    const filtered = options.filter(opt =>
+        opt.label.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const selected = options.find(opt => opt.value === value);
+
+    return (
+        <div className={cn("flex flex-col gap-1.5 relative", className)}>
+            {label && <label className="text-sm font-medium text-slate-600">{label}</label>}
+            <div
+                className={cn(
+                    "border border-slate-300 rounded-xl px-3 py-2 text-slate-900 text-sm bg-white cursor-pointer flex justify-between items-center transition-all",
+                    isOpen && "ring-2 ring-green-500 border-transparent"
+                )}
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <span className={cn(!selected && "text-slate-400")}>
+                    {selected ? selected.label : placeholder}
+                </span>
+                <Search className="w-4 h-4 text-slate-400" />
+            </div>
+
+            {isOpen && (
+                <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-[60] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="p-2 border-b border-slate-100 bg-slate-50">
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                autoFocus
+                                className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                                placeholder="Buscar..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </div>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto">
+                        {filtered.length === 0 ? (
+                            <div className="p-4 text-center text-sm text-slate-400">Sin resultados</div>
+                        ) : (
+                            filtered.map((opt) => (
+                                <div
+                                    key={opt.value}
+                                    className={cn(
+                                        "px-4 py-2.5 text-sm cursor-pointer hover:bg-green-50 transition-colors",
+                                        value === opt.value ? "bg-green-50 text-green-700 font-bold" : "text-slate-700"
+                                    )}
+                                    onClick={() => {
+                                        onChange({ target: { value: opt.value } });
+                                        setIsOpen(false);
+                                        setSearch('');
+                                    }}
+                                >
+                                    {opt.label}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+            {isOpen && <div className="fixed inset-0 z-50" onClick={() => setIsOpen(false)} />}
+        </div>
+    );
+}
+
 
 export function cn(...classes) {
     return classes.filter(Boolean).join(' ');
@@ -114,12 +184,22 @@ export const StatusBadge = ({ status }) => {
     );
 };
 
-export const Modal = ({ open, onClose, title, children }) => {
+export const Modal = ({ open, onClose, title, children, size = "lg" }) => {
     if (!open) return null;
+    const sizes = {
+        sm: "max-w-sm",
+        md: "max-w-md",
+        lg: "max-w-lg",
+        xl: "max-w-4xl",
+        "2xl": "max-w-6xl",
+        "3xl": "max-w-7xl",
+        "4xl": "max-w-[90vw]",
+        "5xl": "max-w-[95vw]",
+    };
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className={cn("relative bg-white rounded-2xl shadow-2xl w-full max-h-[90vh] overflow-y-auto", sizes[size])}>
                 <div className="flex items-center justify-between p-5 border-b border-slate-200">
                     <h2 className="text-lg font-bold text-slate-900">{title}</h2>
                     <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">

@@ -6,17 +6,19 @@ import {
     Textarea, ErrorBanner, SuccessBanner, EmptyState, Spinner, SectionHeader, StatusBadge
 } from './ui';
 
+import { useAuth } from '../context/AuthContext';
+
 /* ── Generic Entity Manager ── */
-function EntityManager({ title, icon: Icon, collectionName, fields, renderRow, emptyMessage }) {
+function EntityManager({ title, icon: Icon, collectionName, fields, renderRow, emptyMessage, initialForm = {} }) {
     const { data, loading, error, addNode, updateNode, deleteNode } = useFirestore(collectionName);
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
-    const [form, setForm] = useState({});
+    const [form, setForm] = useState(initialForm);
     const [saving, setSaving] = useState(false);
     const [success, setSuccess] = useState('');
     const [formError, setFormError] = useState('');
 
-    const openAdd = () => { setEditing(null); setForm({}); setFormError(''); setModalOpen(true); };
+    const openAdd = () => { setEditing(null); setForm(initialForm); setFormError(''); setModalOpen(true); };
     const openEdit = (item) => { setEditing(item); setForm({ ...item }); setFormError(''); setModalOpen(true); };
 
     const handleSave = async () => {
@@ -130,10 +132,12 @@ export function ClientesManager() {
 
 /* ── Variedades ── */
 export function VariedadesManager() {
+    const { userData } = useAuth();
     return (
         <EntityManager
             title="Variedades de Tuna" icon={Sprout} collectionName="variedades"
             emptyMessage="Sin variedades registradas"
+            initialForm={{ presentacion_default: userData?.bodega_info?.tipo_produccion || 'Caja' }}
             fields={[
                 { key: 'nombre', label: 'Nombre de variedad' },
                 { key: 'precio_compra', label: 'Precio de compra', type: 'number' },

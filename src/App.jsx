@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   LayoutDashboard, Tractor, PackageSearch,
   Wrench, Settings, TrendingUp, ShoppingCart, AlertTriangle, ShieldCheck, User, LogOut,
-  ArrowUpRight, ArrowDownRight
+  ArrowUpRight, ArrowDownRight, BarChart3
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { useFirestore } from './hooks/useFirestore';
@@ -14,6 +14,9 @@ import { EntradasSection, ConsolidadorSection, SalidasSection } from './componen
 import Login from './components/Login';
 import { AccountModule } from './components/AccountModule';
 import { AdminModules } from './components/AdminModules';
+import { ReportsModule } from './components/ReportsModule';
+import { SeedManager } from './components/SeedData';
+
 
 /* ─── Market Ticker ─────────────────── */
 function MarketTicker({ variedades = [] }) {
@@ -21,44 +24,64 @@ function MarketTicker({ variedades = [] }) {
     return variedades.map(v => ({
       name: v.nombre,
       pCompra: `$${v.precio_compra || 0}`,
-      pVenta: `$${v.precio_venta || 0}`,
+      pVenta: `$${v.precio_venta || 180}`, // Showing a fallback if 0
       unit: v.presentacion_default || 'Caja'
     }));
   }, [variedades]);
 
+  if (displayItems.length === 0) return null;
+
   return (
     <div className="bg-slate-900 border-b border-slate-800 h-10 flex items-center overflow-hidden sticky top-0 z-30">
-      <div className="bg-green-600 h-full flex items-center px-4 z-10 shadow-lg">
+      <div className="bg-green-600 h-full flex items-center px-4 z-20 shadow-[4px_0_15px_rgba(0,0,0,0.3)]">
         <span className="text-[10px] font-bold text-white uppercase tracking-widest whitespace-nowrap">
           Precios Sugeridos
         </span>
       </div>
-      <div className="flex-1 relative overflow-hidden h-full flex items-center">
-        <div className="animate-ticker flex items-center gap-16 pl-4">
-          {[...displayItems, ...displayItems].map((item, i) => (
-            <div key={i} className="flex items-center gap-4 group cursor-default">
-              <span className="text-slate-200 text-xs font-black uppercase tracking-wider">{item.name}:</span>
-
-              <div className="flex gap-3">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-500 text-[10px] font-bold">C:</span>
-                  <span className="text-white text-sm font-bold">{item.pCompra}</span>
+      <div className="flex-1 overflow-hidden h-full flex items-center">
+        <div className="animate-ticker flex items-center whitespace-nowrap">
+          <div className="flex items-center gap-12 px-6">
+            {displayItems.map((item, i) => (
+              <div key={`v1-${i}`} className="flex items-center gap-4">
+                <span className="text-slate-200 text-xs font-black uppercase tracking-wider">{item.name}:</span>
+                <div className="flex gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 text-[10px] font-bold">C:</span>
+                    <span className="text-white text-sm font-bold">{item.pCompra}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 text-[10px] font-bold">V:</span>
+                    <span className="text-green-400 text-sm font-bold">{item.pVenta}</span>
+                  </div>
                 </div>
-
-                <div className="flex items-center gap-1.5">
-                  <span className="text-slate-500 text-[10px] font-bold">V:</span>
-                  <span className="text-green-400 text-sm font-bold">{item.pVenta}</span>
-                </div>
+                <span className="text-slate-500 text-[10px] lowercase italic">/{item.unit}</span>
               </div>
-
-              <span className="text-slate-500 text-[10px] lowercase italic">/{item.unit}</span>
-            </div>
-          ))}
+            ))}
+          </div>
+          <div className="flex items-center gap-12 px-6">
+            {displayItems.map((item, i) => (
+              <div key={`v2-${i}`} className="flex items-center gap-4">
+                <span className="text-slate-200 text-xs font-black uppercase tracking-wider">{item.name}:</span>
+                <div className="flex gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 text-[10px] font-bold">C:</span>
+                    <span className="text-white text-sm font-bold">{item.pCompra}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 text-[10px] font-bold">V:</span>
+                    <span className="text-green-400 text-sm font-bold">{item.pVenta}</span>
+                  </div>
+                </div>
+                <span className="text-slate-500 text-[10px] lowercase italic">/{item.unit}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
 
 
 /* ─── Nav Item ─────────────────── */
@@ -318,7 +341,8 @@ export default function App() {
               <NavItem icon={Tractor} label="Producción" active={activeTab === 'produccion'} onClick={() => setActiveTab('produccion')} />
               <NavItem icon={PackageSearch} label="Bodega" active={activeTab === 'bodega'} onClick={() => setActiveTab('bodega')} />
               <NavItem icon={Wrench} label="Equipos" active={activeTab === 'equipos'} onClick={() => setActiveTab('equipos')} />
-              <NavItem icon={Settings} label="Configuración" active={activeTab === 'config'} onClick={() => setActiveTab('config')} />
+              <NavItem icon={BarChart3} label="Reportes" active={activeTab === 'reportes'} onClick={() => setActiveTab('reportes')} />
+              <NavItem icon={Settings} label="Catálogos" active={activeTab === 'config'} onClick={() => setActiveTab('config')} />
             </>
           )}
         </nav>
@@ -408,7 +432,7 @@ export default function App() {
 
           {activeTab === 'config' && !isAdmin && (
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 mb-5">Configuración</h1>
+              <h1 className="text-2xl font-bold text-slate-900 mb-5">Catálogos</h1>
               <TabNav
                 tabs={[
                   { key: 'productores', label: 'Productores' },
@@ -421,6 +445,10 @@ export default function App() {
               {subTab.config === 'clientes' && <ClientesManager />}
               {subTab.config === 'variedades' && <VariedadesManager />}
             </div>
+          )}
+
+          {activeTab === 'reportes' && (
+            <ReportsModule productores={productores} clientes={clientes} variedades={variedades} />
           )}
 
           {activeTab === 'cuenta' && !isAdmin && <AccountModule />}

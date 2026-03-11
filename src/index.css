@@ -28,18 +28,19 @@ body {
 
 @keyframes ticker {
   0% {
-    transform: translateX(100%);
+    transform: translateX(0);
   }
 
   100% {
-    transform: translateX(-100%);
+    transform: translateX(-50%);
   }
 }
 
 .animate-ticker {
-  display: inline-block;
+  display: flex;
   white-space: nowrap;
-  animation: ticker 20s linear infinite;
+  animation: ticker 30s linear infinite;
+  width: max-content;
 }
 
 .animate-ticker:hover {
