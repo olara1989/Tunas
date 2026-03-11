@@ -12,13 +12,14 @@ const TIPOS_MANTENIMIENTO = ['Preventivo', 'Correctivo', 'Revisión'];
 export function EquipoSection() {
     const { data: equipo, loading, error, addNode, deleteNode } = useFirestore('equipo');
     const { data: mantenimientos, addNode: addManto } = useFirestore('mantenimientos');
-    const [eqModal, setEqModal] = useState(false);
-    const [mantoModal, setMantoModal] = useState(null); // equipo item
-    const [eqForm, setEqForm] = useState({});
-    const [mantoForm, setMantoForm] = useState({});
+    const [searchTerm, setSearchTerm] = useState('');
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState('');
     const [success, setSuccess] = useState('');
+    const [eqModal, setEqModal] = useState(false);
+    const [eqForm, setEqForm] = useState({});
+    const [mantoModal, setMantoModal] = useState(null);
+    const [mantoForm, setMantoForm] = useState({});
 
     const tipoIcon = { Equipo: '⚙️', Maquinaria: '🏗️', Vehiculo: '🚛' };
 
@@ -27,7 +28,7 @@ export function EquipoSection() {
         setSaving(true); setFormError('');
         try {
             await addNode(eqForm); setEqModal(false); setSuccess('Equipo guardado.'); setTimeout(() => setSuccess(''), 3000);
-        } catch (e) { setFormError(e.message); }
+        } catch (e) { setFormError(e); }
         finally { setSaving(false); }
     };
 
@@ -37,21 +38,40 @@ export function EquipoSection() {
         try {
             await addManto({ ...mantoForm, equipo_id: mantoModal.id });
             setMantoModal(null); setSuccess('Mantenimiento registrado.'); setTimeout(() => setSuccess(''), 3000);
-        } catch (e) { setFormError(e.message); }
+        } catch (e) { setFormError(e); }
         finally { setSaving(false); }
     };
 
     const getMantos = (equipoId) => mantenimientos.filter(m => m.equipo_id === equipoId);
     const nextManto = (equipoId) => getMantos(equipoId).sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0];
 
+    const filteredEquipo = equipo.filter(eq => {
+        if (!searchTerm) return true;
+        const s = searchTerm.toLowerCase();
+        return eq.nombre?.toLowerCase().includes(s) ||
+            eq.marca?.toLowerCase().includes(s) ||
+            eq.modelo?.toLowerCase().includes(s) ||
+            eq.tipo?.toLowerCase().includes(s);
+    });
+
     return (
         <div className="space-y-4">
             <SectionHeader title="Equipos y Maquinaria"
-                action={<Button onClick={() => { setEqForm({}); setFormError(''); setEqModal(true); }}><Plus className="w-4 h-4" /> Nuevo Equipo</Button>} />
+                action={
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                        <Input
+                            placeholder="Buscar equipo..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full sm:w-64"
+                        />
+                        <Button onClick={() => { setEqForm({}); setFormError(''); setEqModal(true); }}><Plus className="w-4 h-4" /> Nuevo Equipo</Button>
+                    </div>
+                } />
             <ErrorBanner error={error} /><SuccessBanner message={success} />
-            {loading ? <Spinner /> : equipo.length === 0 ? <EmptyState icon={Truck} message="Sin equipos registrados" /> : (
+            {loading ? <Spinner /> : filteredEquipo.length === 0 ? <EmptyState icon={Truck} message={searchTerm ? "No se encontraron equipos" : "Sin equipos registrados"} /> : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {equipo.map(eq => {
+                    {filteredEquipo.map(eq => {
                         const ms = getMantos(eq.id);
                         const last = nextManto(eq.id);
                         return (
@@ -116,16 +136,35 @@ export function EquipoSection() {
 export function MantenimientosSection() {
     const { data: mantenimientos, loading, error } = useFirestore('mantenimientos');
     const { data: equipo } = useFirestore('equipo');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const getEquipo = (id) => equipo.find(e => e.id === id);
 
+    const filteredMantos = mantenimientos.filter(m => {
+        if (!searchTerm) return true;
+        const s = searchTerm.toLowerCase();
+        const eq = getEquipo(m.equipo_id);
+        return m.tipo_mantenimiento?.toLowerCase().includes(s) ||
+            m.descripcion?.toLowerCase().includes(s) ||
+            eq?.nombre?.toLowerCase().includes(s);
+    });
+
     return (
         <div className="space-y-4 mt-6">
-            <SectionHeader title="Historial de Mantenimientos" />
+            <SectionHeader title="Historial de Mantenimientos"
+                action={
+                    <Input
+                        placeholder="Buscar mantenimiento..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full sm:w-64"
+                    />
+                }
+            />
             <ErrorBanner error={error} />
-            {loading ? <Spinner /> : mantenimientos.length === 0 ? <EmptyState icon={Wrench} message="Sin mantenimientos registrados" /> : (
+            {loading ? <Spinner /> : filteredMantos.length === 0 ? <EmptyState icon={Wrench} message={searchTerm ? "No se encontraron registros" : "Sin mantenimientos registrados"} /> : (
                 <div className="space-y-3">
-                    {[...mantenimientos].sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(m => {
+                    {[...filteredMantos].sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(m => {
                         const eq = getEquipo(m.equipo_id);
                         const typeColors = { Preventivo: 'bg-blue-50 text-blue-700', Correctivo: 'bg-red-50 text-red-700', 'Revisión': 'bg-yellow-50 text-yellow-700' };
                         return (

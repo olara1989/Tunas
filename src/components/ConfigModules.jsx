@@ -14,6 +14,7 @@ function EntityManager({ title, icon: Icon, collectionName, fields, renderRow, e
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState(initialForm);
+    const [searchTerm, setSearchTerm] = useState('');
     const [saving, setSaving] = useState(false);
     const [success, setSuccess] = useState('');
     const [formError, setFormError] = useState('');
@@ -27,7 +28,7 @@ function EntityManager({ title, icon: Icon, collectionName, fields, renderRow, e
             if (editing) { await updateNode(editing.id, form); setSuccess('Actualizado exitosamente.'); }
             else { await addNode(form); setSuccess('Guardado exitosamente.'); }
             setModalOpen(false);
-        } catch (e) { setFormError(e.message); }
+        } catch (e) { setFormError(e); }
         finally { setSaving(false); setTimeout(() => setSuccess(''), 3000); }
     };
 
@@ -36,19 +37,38 @@ function EntityManager({ title, icon: Icon, collectionName, fields, renderRow, e
         await deleteNode(id);
     };
 
+    const filteredData = data.filter(item => {
+        if (!searchTerm) return true;
+        const search = searchTerm.toLowerCase();
+        return fields.some(f => {
+            const val = String(item[f.key] || '').toLowerCase();
+            return val.includes(search);
+        });
+    });
+
     return (
         <div className="space-y-4">
             <SectionHeader
                 title={title}
-                action={<Button onClick={openAdd}><Plus className="w-4 h-4" /> Nuevo</Button>}
+                action={
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                        <Input
+                            placeholder="Buscar..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full sm:w-64"
+                        />
+                        <Button onClick={openAdd}><Plus className="w-4 h-4" /> Nuevo</Button>
+                    </div>
+                }
             />
             <ErrorBanner error={error} />
             <SuccessBanner message={success} />
-            {loading ? <Spinner /> : data.length === 0 ? (
-                <EmptyState icon={Icon} message={emptyMessage || 'No hay registros aún'} />
+            {loading ? <Spinner /> : filteredData.length === 0 ? (
+                <EmptyState icon={Icon} message={searchTerm ? 'No se encontraron resultados' : (emptyMessage || 'No hay registros aún')} />
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {data.map(item => (
+                    {filteredData.map(item => (
                         <Card key={item.id} className="flex flex-col gap-3">
                             {renderRow(item)}
                             <div className="flex gap-2 pt-2 border-t border-slate-100">

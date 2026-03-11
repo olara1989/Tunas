@@ -3,7 +3,7 @@ import { collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firesto
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, secondaryAuth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { Card, SectionHeader, StatusBadge, EmptyState, Spinner, Button, Modal, Input, Select, ErrorBanner, SuccessBanner } from './ui';
+import { Card, SectionHeader, StatusBadge, EmptyState, Spinner, Button, Modal, Input, Select, ErrorBanner, SuccessBanner, Checkbox } from './ui';
 import { ShieldCheck, Users, Plus, Edit2 } from 'lucide-react';
 
 export function AdminModules() {
@@ -17,6 +17,7 @@ export function AdminModules() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
         if (userData?.rol !== 'admin') return;
@@ -43,12 +44,21 @@ export function AdminModules() {
                 status: form.status || 'active',
                 plan: form.plan || 'mensual',
                 vencimiento: form.vencimiento || new Date().toISOString().split('T')[0],
-                bodega_info: { nombre: form.nombreBodega }
+                bodega_info: { nombre: form.nombreBodega },
+                modulos: form.modulos || {
+                    dashboard: true,
+                    produccion: true,
+                    bodega: true,
+                    equipos: true,
+                    reportes: true,
+                    catalogos: true,
+                    cuenta: true
+                }
             });
             setSuccess('Usuario creado exitosamente.');
             setCreateModal(false); setForm({});
             setTimeout(() => setSuccess(''), 4000);
-        } catch (e) { setError(e.message); }
+        } catch (e) { setError(e); }
         finally { setSaving(false); }
     };
 
@@ -58,17 +68,31 @@ export function AdminModules() {
             await updateDoc(doc(db, 'usuarios', editModal.id), {
                 status: form.status,
                 plan: form.plan,
-                vencimiento: form.vencimiento
+                vencimiento: form.vencimiento,
+                modulos: form.modulos
             });
             setSuccess('Usuario actualizado.');
             setEditModal(null);
             setTimeout(() => setSuccess(''), 4000);
-        } catch (e) { setError(e.message); }
+        } catch (e) { setError(e); }
         finally { setSaving(false); }
     };
 
     const openEdit = (u) => {
-        setForm({ status: u.status || 'active', plan: u.plan || 'mensual', vencimiento: u.vencimiento || '' });
+        setForm({
+            status: u.status || 'active',
+            plan: u.plan || 'mensual',
+            vencimiento: u.vencimiento || '',
+            modulos: u.modulos || {
+                dashboard: true,
+                produccion: true,
+                bodega: true,
+                equipos: true,
+                reportes: true,
+                catalogos: true,
+                cuenta: true
+            }
+        });
         setEditModal(u);
     };
 
@@ -104,9 +128,17 @@ export function AdminModules() {
             </div>
 
             <Card>
-                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-slate-400" /> Cuentas Registradas
-                </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                        <Users className="w-5 h-5 text-slate-400" /> Cuentas Registradas
+                    </h3>
+                    <Input
+                        placeholder="Buscar por email o bodega..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full sm:w-72"
+                    />
+                </div>
                 {loading ? <Spinner /> : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
@@ -120,52 +152,59 @@ export function AdminModules() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {usuarios.map(u => (
-                                    <tr key={u.id} className="hover:bg-slate-50">
-                                        <td className="px-4 py-3">
-                                            <p className="font-medium text-slate-900">{u.email}</p>
-                                            <p className="text-xs text-slate-400 font-mono">{u.id}</p>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <StatusBadge status={u.rol === 'admin' ? 'admin' : 'tenant'} />
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <p className="text-slate-700 font-medium">{u.bodega_info?.nombre || 'Sin configurar'}</p>
-                                            <p className="font-mono text-xs text-slate-500">{u.tenant_id || 'N/A'}</p>
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            {u.rol === 'tenant' ? (
-                                                <div className="flex flex-col items-center gap-1">
-                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                        {u.status === 'active' ? 'Activo' : 'Inactivo'}
-                                                    </span>
-                                                    <p className="text-xs text-slate-500">{u.plan} · {u.vencimiento}</p>
-                                                </div>
-                                            ) : <span className="text-slate-300">—</span>}
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            {u.rol === 'tenant' && (
-                                                <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        className="px-2 py-1 text-slate-400 hover:text-blue-600"
-                                                        onClick={() => openEdit(u)}
-                                                    >
-                                                        <Edit2 className="w-4 h-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="secondary"
-                                                        className="px-3 py-1 text-xs font-semibold"
-                                                        onClick={() => setActiveTenant({ id: u.tenant_id, email: u.email, nombre: u.bodega_info?.nombre })}
-                                                        disabled={u.status !== 'active'}
-                                                    >
-                                                        Gestionar
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
+                                {usuarios
+                                    .filter(u => {
+                                        if (!searchTerm) return true;
+                                        const s = searchTerm.toLowerCase();
+                                        return u.email?.toLowerCase().includes(s) ||
+                                            u.bodega_info?.nombre?.toLowerCase().includes(s);
+                                    })
+                                    .map(u => (
+                                        <tr key={u.id} className="hover:bg-slate-50">
+                                            <td className="px-4 py-3">
+                                                <p className="font-medium text-slate-900">{u.email}</p>
+                                                <p className="text-xs text-slate-400 font-mono">{u.id}</p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <StatusBadge status={u.rol === 'admin' ? 'admin' : 'tenant'} />
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <p className="text-slate-700 font-medium">{u.bodega_info?.nombre || 'Sin configurar'}</p>
+                                                <p className="font-mono text-xs text-slate-500">{u.tenant_id || 'N/A'}</p>
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                {u.rol === 'tenant' ? (
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${u.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                            {u.status === 'active' ? 'Activo' : 'Inactivo'}
+                                                        </span>
+                                                        <p className="text-xs text-slate-500">{u.plan} · {u.vencimiento}</p>
+                                                    </div>
+                                                ) : <span className="text-slate-300">—</span>}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                {u.rol === 'tenant' && (
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button
+                                                            variant="ghost"
+                                                            className="px-2 py-1 text-slate-400 hover:text-blue-600"
+                                                            onClick={() => openEdit(u)}
+                                                        >
+                                                            <Edit2 className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="secondary"
+                                                            className="px-3 py-1 text-xs font-semibold"
+                                                            onClick={() => setActiveTenant(u)}
+                                                            disabled={u.status !== 'active'}
+                                                        >
+                                                            Gestionar
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
                             </tbody>
                         </table>
                     </div>
@@ -185,6 +224,19 @@ export function AdminModules() {
                     </div>
                     <Select label="Estado" options={[{ value: 'active', label: 'Activo' }, { value: 'inactive', label: 'Inactivo' }]} value={form.status || 'active'} onChange={e => setForm({ ...form, status: e.target.value })} />
 
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <p className="text-xs font-bold text-slate-500 uppercase mb-3">Habilitar Módulos</p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Checkbox label="Dashboard" checked={form.modulos?.dashboard} onChange={v => setForm({ ...form, modulos: { ...form.modulos, dashboard: v } })} />
+                            <Checkbox label="Producción" checked={form.modulos?.produccion} onChange={v => setForm({ ...form, modulos: { ...form.modulos, produccion: v } })} />
+                            <Checkbox label="Bodega/Ventas" checked={form.modulos?.bodega} onChange={v => setForm({ ...form, modulos: { ...form.modulos, bodega: v } })} />
+                            <Checkbox label="Equipos" checked={form.modulos?.equipos} onChange={v => setForm({ ...form, modulos: { ...form.modulos, equipos: v } })} />
+                            <Checkbox label="Reportes" checked={form.modulos?.reportes} onChange={v => setForm({ ...form, modulos: { ...form.modulos, reportes: v } })} />
+                            <Checkbox label="Catálogos" checked={form.modulos?.catalogos} onChange={v => setForm({ ...form, modulos: { ...form.modulos, catalogos: v } })} />
+                            <Checkbox label="Mi Cuenta" checked={form.modulos?.cuenta} onChange={v => setForm({ ...form, modulos: { ...form.modulos, cuenta: v } })} />
+                        </div>
+                    </div>
+
                     <div className="flex justify-end gap-2 pt-4">
                         <Button variant="secondary" onClick={() => setCreateModal(false)}>Cancelar</Button>
                         <Button loading={saving} onClick={handleCreateUser}>Crear Usuario</Button>
@@ -201,6 +253,19 @@ export function AdminModules() {
                     <div className="grid grid-cols-2 gap-3">
                         <Select label="Plan" options={[{ value: 'mensual', label: 'Mensual' }, { value: 'anual', label: 'Anual' }]} value={form.plan || 'mensual'} onChange={e => setForm({ ...form, plan: e.target.value })} />
                         <Input label="Vencimiento" type="date" value={form.vencimiento || ''} onChange={e => setForm({ ...form, vencimiento: e.target.value })} />
+                    </div>
+
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <p className="text-xs font-bold text-slate-500 uppercase mb-3">Funciones Habilitadas</p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Checkbox label="Dashboard" checked={form.modulos?.dashboard} onChange={v => setForm({ ...form, modulos: { ...form.modulos, dashboard: v } })} />
+                            <Checkbox label="Producción" checked={form.modulos?.produccion} onChange={v => setForm({ ...form, modulos: { ...form.modulos, produccion: v } })} />
+                            <Checkbox label="Bodega/Ventas" checked={form.modulos?.bodega} onChange={v => setForm({ ...form, modulos: { ...form.modulos, bodega: v } })} />
+                            <Checkbox label="Equipos" checked={form.modulos?.equipos} onChange={v => setForm({ ...form, modulos: { ...form.modulos, equipos: v } })} />
+                            <Checkbox label="Reportes" checked={form.modulos?.reportes} onChange={v => setForm({ ...form, modulos: { ...form.modulos, reportes: v } })} />
+                            <Checkbox label="Catálogos" checked={form.modulos?.catalogos} onChange={v => setForm({ ...form, modulos: { ...form.modulos, catalogos: v } })} />
+                            <Checkbox label="Mi Cuenta" checked={form.modulos?.cuenta} onChange={v => setForm({ ...form, modulos: { ...form.modulos, cuenta: v } })} />
+                        </div>
                     </div>
                     <div className="flex justify-end gap-2 pt-4">
                         <Button variant="secondary" onClick={() => setEditModal(null)}>Cancelar</Button>

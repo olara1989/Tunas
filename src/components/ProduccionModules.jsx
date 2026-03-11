@@ -175,6 +175,7 @@ export function HuertasSection({ variedades }) {
         lng: null
     });
 
+    const [searchTerm, setSearchTerm] = useState('');
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState('');
     const [success, setSuccess] = useState('');
@@ -201,17 +202,36 @@ export function HuertasSection({ variedades }) {
             else await addNode(form);
             setModalOpen(false); setSuccess('Guardado.');
             setTimeout(() => setSuccess(''), 3000);
-        } catch (e) { setFormError(e.message); }
+        } catch (e) { setFormError(e); }
         finally { setSaving(false); }
     };
 
+    const filteredHuertas = huertas.filter(h => {
+        if (!searchTerm) return true;
+        const s = searchTerm.toLowerCase();
+        return h.nombre?.toLowerCase().includes(s) ||
+            h.ubicacion?.toLowerCase().includes(s);
+    });
+
     return (
         <div className="space-y-4">
-            <SectionHeader title="Huertas" action={<Button onClick={openAdd}><Plus className="w-4 h-4" /> Nueva Huerta</Button>} />
+            <SectionHeader title="Huertas"
+                action={
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                        <Input
+                            placeholder="Buscar huerta..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full sm:w-64"
+                        />
+                        <Button onClick={openAdd}><Plus className="w-4 h-4" /> Nueva Huerta</Button>
+                    </div>
+                }
+            />
             <ErrorBanner error={error} /><SuccessBanner message={success} />
-            {loading ? <Spinner /> : huertas.length === 0 ? <EmptyState icon={Tractor} message="No hay huertas registradas" /> : (
+            {loading ? <Spinner /> : filteredHuertas.length === 0 ? <EmptyState icon={Tractor} message={searchTerm ? "No se encontraron huertas" : "No hay huertas registradas"} /> : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {huertas.map(h => (
+                    {filteredHuertas.map(h => (
                         <Card key={h.id}>
                             <p className="font-semibold text-slate-900 text-lg">{h.nombre}</p>
                             <p className="text-sm text-slate-500 mt-1">📍 {h.ubicacion} · {h.superficie} ha</p>
@@ -388,6 +408,7 @@ export function ManejosSection({ huertas, variedades }) {
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState('');
     const [success, setSuccess] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
     const [expandedHuerta, setExpandedHuerta] = useState(null);
 
     const tiposTrabajo = ['Poda', 'Fertilización', 'Riego', 'Control de Plagas', 'Cosecha', 'Limpieza'];
@@ -401,7 +422,7 @@ export function ManejosSection({ huertas, variedades }) {
             await addNode(data);
             setModalOpen(false); setSuccess('Manejo registrado.');
             setTimeout(() => setSuccess(''), 3000);
-        } catch (e) { setFormError(e.message); }
+        } catch (e) { setFormError(e); }
         finally { setSaving(false); }
     };
 
@@ -411,14 +432,35 @@ export function ManejosSection({ huertas, variedades }) {
         return map;
     }, [manejos]);
 
+    const filteredHuertas = huertas.filter(h => {
+        if (!searchTerm) return true;
+        const s = searchTerm.toLowerCase();
+        const ms = manejosBy[h.id] || [];
+        const hasMatchingManejo = ms.some(m =>
+            m.tipo_trabajo?.toLowerCase().includes(s) ||
+            m.notas?.toLowerCase().includes(s)
+        );
+        return h.nombre?.toLowerCase().includes(s) || hasMatchingManejo;
+    });
+
     return (
         <div className="space-y-4 mt-6">
             <SectionHeader title="Manejos de Campo"
-                action={<Button onClick={() => { setForm({}); setModalOpen(true); }}><Plus className="w-4 h-4" /> Nuevo Manejo</Button>} />
+                action={
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                        <Input
+                            placeholder="Buscar en manejos..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full sm:w-64"
+                        />
+                        <Button onClick={() => { setForm({}); setModalOpen(true); }}><Plus className="w-4 h-4" /> Nuevo Manejo</Button>
+                    </div>
+                } />
             <ErrorBanner error={error} /><SuccessBanner message={success} />
-            {loading ? <Spinner /> : huertas.length === 0 ? <EmptyState icon={Wrench} message="Registra huertas primero" /> : (
+            {loading ? <Spinner /> : filteredHuertas.length === 0 ? <EmptyState icon={Wrench} message={searchTerm ? "Sin resultados" : "Registra huertas primero"} /> : (
                 <div className="space-y-3">
-                    {huertas.map(h => {
+                    {filteredHuertas.map(h => {
                         const ms = manejosBy[h.id] || [];
                         const open = expandedHuerta === h.id;
                         return (

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   LayoutDashboard, Tractor, PackageSearch,
   Wrench, Settings, TrendingUp, ShoppingCart, AlertTriangle, ShieldCheck, User, LogOut,
-  ArrowUpRight, ArrowDownRight, BarChart3
+  ArrowUpRight, ArrowDownRight, BarChart3, Library
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { useFirestore } from './hooks/useFirestore';
@@ -276,6 +276,9 @@ export default function App() {
 
   const setTab = (module, tab) => setSubTab(p => ({ ...p, [module]: tab }));
 
+  const currentModules = activeTenant?.modulos || userData?.modulos || {};
+  const isEnabled = (key) => currentModules[key] !== false;
+
   if (!user) return <Login />;
 
   // SUBSCRIPTION BLOCKING LOGIC
@@ -337,18 +340,18 @@ export default function App() {
 
           {(!isAdmin || activeTenant) && (
             <>
-              <NavItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-              <NavItem icon={Tractor} label="Producción" active={activeTab === 'produccion'} onClick={() => setActiveTab('produccion')} />
-              <NavItem icon={PackageSearch} label="Bodega" active={activeTab === 'bodega'} onClick={() => setActiveTab('bodega')} />
-              <NavItem icon={Wrench} label="Equipos" active={activeTab === 'equipos'} onClick={() => setActiveTab('equipos')} />
-              <NavItem icon={BarChart3} label="Reportes" active={activeTab === 'reportes'} onClick={() => setActiveTab('reportes')} />
-              <NavItem icon={Settings} label="Catálogos" active={activeTab === 'config'} onClick={() => setActiveTab('config')} />
+              {isEnabled('dashboard') && <NavItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />}
+              {isEnabled('produccion') && <NavItem icon={Tractor} label="Producción" active={activeTab === 'produccion'} onClick={() => setActiveTab('produccion')} />}
+              {isEnabled('bodega') && <NavItem icon={PackageSearch} label="Bodega" active={activeTab === 'bodega'} onClick={() => setActiveTab('bodega')} />}
+              {isEnabled('equipos') && <NavItem icon={Wrench} label="Equipos" active={activeTab === 'equipos'} onClick={() => setActiveTab('equipos')} />}
+              {isEnabled('reportes') && <NavItem icon={BarChart3} label="Reportes" active={activeTab === 'reportes'} onClick={() => setActiveTab('reportes')} />}
+              {isEnabled('catalogos') && <NavItem icon={Library} label="Catálogos" active={activeTab === 'config'} onClick={() => setActiveTab('config')} />}
             </>
           )}
         </nav>
 
         <div className="hidden md:block mt-auto p-4 border-t border-slate-800">
-          {!isAdmin && <NavItem icon={User} label="Mi Cuenta" active={activeTab === 'cuenta'} onClick={() => setActiveTab('cuenta')} />}
+          {!isAdmin && isEnabled('cuenta') && <NavItem icon={User} label="Mi Cuenta" active={activeTab === 'cuenta'} onClick={() => setActiveTab('cuenta')} />}
           <button
             onClick={() => logout()}
             className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all w-full text-left text-red-400 hover:bg-red-500/10 mt-2"
@@ -382,14 +385,14 @@ export default function App() {
         )}
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && isEnabled('dashboard') && (
             <Dashboard
               entradas={entradas} detalles={detalles}
               detalleSalidas={detalleSalidas} mantenimientos={mantenimientos} equipo={equipo}
             />
           )}
 
-          {activeTab === 'produccion' && (
+          {activeTab === 'produccion' && isEnabled('produccion') && (
             <div>
               <h1 className="text-2xl font-bold text-slate-900 mb-5">Producción</h1>
               <TabNav
@@ -401,7 +404,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'bodega' && (
+          {activeTab === 'bodega' && isEnabled('bodega') && (
             <div>
               <h1 className="text-2xl font-bold text-slate-900 mb-5">Bodega & Ventas</h1>
               <TabNav
@@ -418,7 +421,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'equipos' && (
+          {activeTab === 'equipos' && isEnabled('equipos') && (
             <div>
               <h1 className="text-2xl font-bold text-slate-900 mb-5">Equipos & Maquinaria</h1>
               <TabNav
@@ -430,7 +433,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'config' && !isAdmin && (
+          {activeTab === 'config' && isEnabled('catalogos') && !isAdmin && (
             <div>
               <h1 className="text-2xl font-bold text-slate-900 mb-5">Catálogos</h1>
               <TabNav
@@ -447,7 +450,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'reportes' && (
+          {activeTab === 'reportes' && isEnabled('reportes') && (
             <ReportsModule productores={productores} clientes={clientes} variedades={variedades} />
           )}
 

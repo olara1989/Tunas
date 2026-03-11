@@ -19,16 +19,15 @@ export default function Login() {
         try {
             await login(email, password);
         } catch (err) {
-            // If user not found, let's auto-register them for demo purposes
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+            // Auto-registro para demo
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
                 try {
                     await createUserWithEmailAndPassword(auth, email, password);
-                    // The onAuthStateChanged in AuthContext will catch this and bootstrap them
                 } catch (regErr) {
-                    setError('Credenciales inválidas o error de registro: ' + regErr.message);
+                    setError(regErr);
                 }
             } else {
-                setError(err.message);
+                setError(err);
             }
         } finally {
             setLoading(false);

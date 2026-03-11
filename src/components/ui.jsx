@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertCircle, X, Loader2, Search } from 'lucide-react';
+import { AlertCircle, X, Loader2, Search, Check } from 'lucide-react';
+import { getErrorMessage } from '../utils/errors';
 
 export function SearchableSelect({ label, options = [], value, onChange, placeholder = "-- Seleccionar --", className }) {
     const [search, setSearch] = React.useState('');
@@ -148,10 +149,11 @@ export const Select = ({ label, options = [], className, ...props }) => (
 
 export const ErrorBanner = ({ error }) => {
     if (!error) return null;
+    const message = getErrorMessage(error);
     return (
-        <div className="bg-red-50 text-red-600 p-3 rounded-xl flex items-center gap-2 mb-4 text-sm">
+        <div className="bg-red-50 text-red-600 p-3 rounded-xl flex items-center gap-2 mb-4 text-sm border border-red-100 shadow-sm animate-in slide-in-from-top-2 duration-300">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>{error}</span>
+            <span className="font-medium">{message}</span>
         </div>
     );
 };
@@ -253,6 +255,19 @@ export const Spinner = () => (
     <div className="flex justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-green-500" />
     </div>
+);
+
+export const Checkbox = ({ label, checked, onChange, className }) => (
+    <label className={cn("flex items-center gap-3 cursor-pointer group", className)}>
+        <div className={cn(
+            "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
+            checked ? "bg-green-600 border-green-600" : "bg-white border-slate-300 group-hover:border-slate-400"
+        )}>
+            {checked && <Check className="w-3.5 h-3.5 text-white" />}
+            <input type="checkbox" className="hidden" checked={checked} onChange={e => onChange(e.target.checked)} />
+        </div>
+        {label && <span className="text-sm font-medium text-slate-700">{label}</span>}
+    </label>
 );
 
 export const SectionHeader = ({ title, action }) => (

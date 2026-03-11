@@ -13,6 +13,7 @@ export function EntradasSection({ productores, variedades }) {
     const { userData } = useAuth();
     const { data: entradas, loading, error, addNode, updateNode } = useFirestore('registro_entradas');
     const { data: detalles, addNode: addDetalle } = useFirestore('detalle_entradas');
+    const [searchTerm, setSearchTerm] = useState('');
     const [entradaModal, setEntradaModal] = useState(false);
     const [viewing, setViewing] = useState(null); // Para ver detalles y mandar a imprimir
 
@@ -112,7 +113,7 @@ export function EntradasSection({ productores, variedades }) {
             setEntradaModal(false);
             setSuccess(`Entrada #${form.folio} registrada exitosamente.`);
             setTimeout(() => setSuccess(''), 3000);
-        } catch (e) { setFormError(e.message); }
+        } catch (e) { setFormError(e); }
         finally { setSaving(false); }
     };
 
@@ -229,17 +230,36 @@ export function EntradasSection({ productores, variedades }) {
     const getDetalles = (entradaId) => detalles.filter(d => d.registro_entrada_id === entradaId);
     const getProductor = (id) => productores.find(p => p.id === id);
 
+    const filteredEntradas = entradas.filter(e => {
+        if (!searchTerm) return true;
+        const s = searchTerm.toLowerCase();
+        const prod = getProductor(e.productor_id);
+        return prod?.nombre?.toLowerCase().includes(s) ||
+            e.folio?.toString().includes(s) ||
+            e.fecha?.toLowerCase().includes(s);
+    });
+
     return (
         <div className="space-y-4">
             <SectionHeader title="Entradas de Producto"
-                action={<Button onClick={() => setEntradaModal(true)}>
-                    <Plus className="w-4 h-4" /> Nueva Entrada
-                </Button>} />
+                action={
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                        <Input
+                            placeholder="Buscar folio o productor..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full sm:w-64"
+                        />
+                        <Button onClick={() => setEntradaModal(true)}>
+                            <Plus className="w-4 h-4" /> Nueva Entrada
+                        </Button>
+                    </div>
+                } />
             <ErrorBanner error={error} /><SuccessBanner message={success} />
 
-            {loading ? <Spinner /> : entradas.length === 0 ? <EmptyState icon={PackageSearch} message="Sin entradas registradas" /> : (
+            {loading ? <Spinner /> : filteredEntradas.length === 0 ? <EmptyState icon={PackageSearch} message={searchTerm ? "No se encontraron entradas" : "Sin entradas registradas"} /> : (
                 <div className="space-y-3">
-                    {[...entradas].sort((a, b) => b.folio - a.folio).map(e => {
+                    {[...filteredEntradas].sort((a, b) => b.folio - a.folio).map(e => {
                         const ds = getDetalles(e.id);
                         const prod = getProductor(e.productor_id);
                         return (
@@ -484,6 +504,7 @@ export function ConsolidadorSection({ clientes, variedades }) {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
     // New Sale Setup States
     const [setupModal, setSetupModal] = useState(false);
@@ -507,9 +528,16 @@ export function ConsolidadorSection({ clientes, variedades }) {
         detalles.filter(d => {
             const matchesVariety = !saleContext || saleContext.varieties.some(v => v.variedad_id === d.variedad_id);
             const disponible = d.cantidad_recibida - (d.cantidad_vendida || 0) - (d.merma || 0);
-            return (d.status === 'almacenada' || d.status === 'en_proceso') && disponible > 0 && matchesVariety;
+
+            // Filter by search term
+            const searchStr = searchTerm.toLowerCase();
+            const matchesSearch = !searchTerm ||
+                d.tarima_no?.toString().includes(searchStr) ||
+                variedades.find(v => v.id === d.variedad_id)?.nombre?.toLowerCase().includes(searchStr);
+
+            return (d.status === 'almacenada' || d.status === 'en_proceso') && disponible > 0 && matchesVariety && matchesSearch;
         }),
-        [detalles, saleContext]
+        [detalles, saleContext, searchTerm, variedades]
     );
 
     const inCart = (id) => cart.find(c => c.detalle.id === id);
@@ -635,7 +663,7 @@ export function ConsolidadorSection({ clientes, variedades }) {
 
             setCart([]); setClienteId(''); setSaleContext(null); setSuccess('¡Salida registrada exitosamente!');
             setTimeout(() => setSuccess(''), 4000);
-        } catch (e) { setError(e.message); }
+        } catch (e) { setError(e); }
         finally { setSaving(false); }
     };
 
@@ -651,7 +679,15 @@ export function ConsolidadorSection({ clientes, variedades }) {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Left: available lotes */}
                     <div>
-                        <p className="text-sm font-semibold text-slate-600 mb-3">Lotes disponibles ({disponibles.length})</p>
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="text-sm font-semibold text-slate-600">Lotes disponibles ({disponibles.length})</p>
+                            <Input
+                                placeholder="Filtrar lotes..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="w-48 h-8 text-xs"
+                            />
+                        </div>
                         <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                             {disponibles.length === 0 && <EmptyState icon={PackageSearch} message="No hay lotes disponibles" />}
                             {disponibles.map(d => {
@@ -815,17 +851,35 @@ export function SalidasSection({ clientes }) {
     const { data: salidas, loading, error } = useFirestore('registro_salidas');
     const { data: detalleSalidas } = useFirestore('detalle_salidas');
     const { data: detalleEntradas } = useFirestore('detalle_entradas');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const getCliente = (id) => clientes.find(c => c.id === id);
     const getDetalles = (salidaId) => detalleSalidas.filter(d => d.registro_salida_id === salidaId);
 
+    const filteredSalidas = salidas.filter(s => {
+        if (!searchTerm) return true;
+        const sStr = searchTerm.toLowerCase();
+        const cliente = getCliente(s.cliente_id);
+        return cliente?.nombre?.toLowerCase().includes(sStr) ||
+            s.fecha?.toLowerCase().includes(sStr);
+    });
+
     return (
         <div className="space-y-4 mt-6">
-            <SectionHeader title="Historial de Salidas" />
+            <SectionHeader title="Historial de Salidas"
+                action={
+                    <Input
+                        placeholder="Buscar cliente o fecha..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full sm:w-64"
+                    />
+                }
+            />
             <ErrorBanner error={error} />
-            {loading ? <Spinner /> : salidas.length === 0 ? <EmptyState icon={ShoppingCart} message="Sin salidas registradas" /> : (
+            {loading ? <Spinner /> : filteredSalidas.length === 0 ? <EmptyState icon={ShoppingCart} message={searchTerm ? "Sin resultados" : "Sin salidas registradas"} /> : (
                 <div className="space-y-3">
-                    {[...salidas].sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(s => {
+                    {[...filteredSalidas].sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(s => {
                         const cliente = getCliente(s.cliente_id);
                         const ds = getDetalles(s.id);
                         return (
