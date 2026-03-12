@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import {
     Card, Button, Input, Select, Modal, Textarea, RadioGroup,
     ErrorBanner, SuccessBanner, EmptyState, Spinner, SectionHeader, StatusBadge, cn,
-    SearchableSelect
+    SearchableSelect, Checkbox
 } from './ui';
 
 /* ── Entradas (Recepciones de Lotes) ── */
@@ -762,61 +762,150 @@ export function ConsolidadorSection({ clientes, variedades }) {
             )}
 
             {/* Modal de Configuración de Venta */}
-            <Modal open={setupModal} onClose={() => setSetupModal(false)} title="Configurar Nueva Venta">
-                <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+            <Modal open={setupModal} onClose={() => setSetupModal(false)} title="Configurar venta / barrida nueva">
+                <div className="space-y-4 max-h-[85vh] flex flex-col pr-1">
                     <SearchableSelect label="Cliente" options={clientes.map(c => ({ value: c.id, label: c.nombre }))} value={setupForm.cliente_id || ''} onChange={e => setSetupForm(p => ({ ...p, cliente_id: e.target.value }))} />
 
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
-                        <p className="text-xs font-bold text-slate-500 uppercase mb-2">Agregar Variedad</p>
-                        <div className="space-y-3">
-                            <Select
-                                label="Variedad"
-                                options={variedades.map(v => ({ value: v.id, label: v.nombre }))}
-                                value={currentVariety.variedad_id || ''}
-                                onChange={e => {
-                                    const v = variedades.find(x => x.id === e.target.value);
-                                    setCurrentVariety(p => ({ ...p, variedad_id: e.target.value, precio_venta: v?.precio_venta || 0, precio_compra: v?.precio_compra || 0 }));
-                                }}
-                            />
-                            <div className="grid grid-cols-2 gap-3">
-                                <Input label="Precio Venta ($)" type="number" value={currentVariety.precio_venta || ''} onChange={e => setCurrentVariety(p => ({ ...p, precio_venta: e.target.value }))} />
-                                <Input label="Precio Compra ($)" type="number" value={currentVariety.precio_compra || ''} onChange={e => setCurrentVariety(p => ({ ...p, precio_compra: e.target.value }))} />
-                            </div>
-                            <RadioGroup
-                                label="Presentación"
-                                options={[{ value: 'Caja', label: 'Caja' }, { value: 'Kilo', label: 'Kilo' }]}
-                                value={currentVariety.presentacion}
-                                onChange={val => setCurrentVariety(p => ({ ...p, presentacion: val }))}
-                            />
-                            {currentVariety.presentacion === 'Caja' && (
-                                <Input label="Kilos estimados por caja" type="number" value={currentVariety.kilos_por_caja || ''} onChange={e => setCurrentVariety(p => ({ ...p, kilos_por_caja: e.target.value }))} />
-                            )}
-                            <Button variant="outline" className="w-full" onClick={addVarietyToSetup}>
-                                <Plus className="w-4 h-4 mr-2" /> Añadir a la lista
-                            </Button>
-                        </div>
+                    <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl">
+                        <table className="w-full text-sm text-left border-collapse">
+                            <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold sticky top-0 z-10 border-b border-slate-200">
+                                <tr>
+                                    <th className="px-3 py-3 text-center">En Venta</th>
+                                    <th className="px-3 py-3">Variedad</th>
+                                    <th className="px-3 py-3">P. Venta ($)</th>
+                                    <th className="px-3 py-3">P. Compra ($)</th>
+                                    <th className="px-3 py-3">Presentación</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                                {[...variedades].sort((a, b) => a.nombre.localeCompare(b.nombre)).map(v => {
+                                    const isSelected = setupForm.varieties.some(sv => sv.variedad_id === v.id);
+                                    const config = setupForm.varieties.find(sv => sv.variedad_id === v.id);
+
+                                    return (
+                                        <tr key={v.id} className={cn("transition-colors", isSelected ? "bg-green-50/30" : "bg-white opacity-60")}>
+                                            <td className="px-3 py-3 text-center w-16">
+                                                <Checkbox
+                                                    checked={isSelected}
+                                                    onChange={(checked) => {
+                                                        if (checked) {
+                                                            setSetupForm(p => ({
+                                                                ...p,
+                                                                varieties: [...p.varieties, {
+                                                                    id: Date.now() + Math.random(),
+                                                                    variedad_id: v.id,
+                                                                    precio_venta: v.precio_venta || 0,
+                                                                    precio_compra: v.precio_compra || 0,
+                                                                    presentacion: v.presentacion_default || 'Caja',
+                                                                    kilos_por_caja: 25
+                                                                }]
+                                                            }));
+                                                        } else {
+                                                            setSetupForm(p => ({
+                                                                ...p,
+                                                                varieties: p.varieties.filter(sv => sv.variedad_id !== v.id)
+                                                            }));
+                                                        }
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="px-3 py-3">
+                                                <p className="font-semibold text-slate-900">{v.nombre}</p>
+                                                <p className="text-[10px] text-slate-400 capitalize">Base: ${v.precio_venta} / ${v.precio_compra}</p>
+                                            </td>
+                                            <td className="px-3 py-3 w-28">
+                                                <Input
+                                                    type="number"
+                                                    disabled={!isSelected}
+                                                    className="w-full text-sm py-1.5"
+                                                    value={config?.precio_venta || ''}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setSetupForm(p => ({
+                                                            ...p,
+                                                            varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, precio_venta: val } : sv)
+                                                        }));
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="px-3 py-3 w-28">
+                                                <Input
+                                                    type="number"
+                                                    disabled={!isSelected}
+                                                    className="w-full text-sm py-1.5"
+                                                    value={config?.precio_compra || ''}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setSetupForm(p => ({
+                                                            ...p,
+                                                            varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, precio_compra: val } : sv)
+                                                        }));
+                                                    }}
+                                                />
+                                            </td>
+                                            <td className="px-3 py-3 min-w-[140px]">
+                                                <div className="flex flex-col gap-2">
+                                                    <div className="flex bg-slate-100 rounded-lg p-0.5">
+                                                        <button
+                                                            disabled={!isSelected}
+                                                            onClick={() => {
+                                                                setSetupForm(p => ({
+                                                                    ...p,
+                                                                    varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, presentacion: 'Caja' } : sv)
+                                                                }));
+                                                            }}
+                                                            className={cn("flex-1 px-2 py-1 rounded-md text-[10px] uppercase font-bold transition-all",
+                                                                isSelected && config?.presentacion === 'Caja' ? "bg-white text-green-700 shadow-sm" : "text-slate-500")}
+                                                        >Caja</button>
+                                                        <button
+                                                            disabled={!isSelected}
+                                                            onClick={() => {
+                                                                setSetupForm(p => ({
+                                                                    ...p,
+                                                                    varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, presentacion: 'Kilo' } : sv)
+                                                                }));
+                                                            }}
+                                                            className={cn("flex-1 px-2 py-1 rounded-md text-[10px] uppercase font-bold transition-all",
+                                                                isSelected && config?.presentacion === 'Kilo' ? "bg-white text-green-700 shadow-sm" : "text-slate-500")}
+                                                        >Kilo</button>
+                                                    </div>
+                                                    {isSelected && config?.presentacion === 'Caja' && (
+                                                        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5 ml-1">Kilos p/ Caja</p>
+                                                            <Input
+                                                                type="number"
+                                                                className="w-full text-sm py-1"
+                                                                placeholder="KG"
+                                                                value={config?.kilos_por_caja || ''}
+                                                                onChange={e => {
+                                                                    const val = e.target.value;
+                                                                    setSetupForm(p => ({
+                                                                        ...p,
+                                                                        varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, kilos_por_caja: val } : sv)
+                                                                    }));
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
 
-                    {setupForm.varieties.length > 0 && (
-                        <div className="space-y-2">
-                            <p className="text-xs font-bold text-slate-500 uppercase">Variedades configuradas</p>
-                            {setupForm.varieties.map(v => (
-                                <div key={v.id} className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded-lg text-sm">
-                                    <div>
-                                        <p className="font-semibold">{variedades.find(x => x.id === v.variedad_id)?.nombre}</p>
-                                        <p className="text-xs text-slate-500">V: ${v.precio_venta} · C: ${v.precio_compra} · {v.presentacion}</p>
-                                    </div>
-                                    <button onClick={() => removeVarietyFromSetup(v.id)} className="p-1 text-red-500 hover:bg-red-50 rounded">
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 bg-white">
                         <Button variant="secondary" onClick={() => setSetupModal(false)}>Cancelar</Button>
-                        <Button onClick={handleConfirmSetup} disabled={setupForm.varieties.length === 0}>Iniciar Proceso</Button>
+                        <Button
+                            loading={saving}
+                            onClick={handleConfirmSetup}
+                            disabled={setupForm.varieties.length === 0}
+                            className="bg-green-600 hover:bg-green-700 text-white min-w-[140px]"
+                        >
+                            Iniciar Proceso
+                        </Button>
                     </div>
                 </div>
             </Modal>

@@ -4,7 +4,9 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, secondaryAuth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Card, SectionHeader, StatusBadge, EmptyState, Spinner, Button, Modal, Input, Select, ErrorBanner, SuccessBanner, Checkbox } from './ui';
-import { ShieldCheck, Users, Plus, Edit2 } from 'lucide-react';
+import { ShieldCheck, Users, Plus, Edit2, Trash2, AlertTriangle } from 'lucide-react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { writeBatch, query, where, getDocs } from 'firebase/firestore';
 
 export function AdminModules() {
     const { userData, setActiveTenant, logout } = useAuth();
@@ -18,6 +20,9 @@ export function AdminModules() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [deleteModal, setDeleteModal] = useState(null);
+    const [adminPassword, setAdminPassword] = useState('');
+    const [verifying, setVerifying] = useState(false);
 
     useEffect(() => {
         if (userData?.rol !== 'admin') return;
@@ -153,6 +158,7 @@ export function AdminModules() {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {usuarios
+                                    .filter(u => u.status !== 'deleted')
                                     .filter(u => {
                                         if (!searchTerm) return true;
                                         const s = searchTerm.toLowerCase();
@@ -191,6 +197,17 @@ export function AdminModules() {
                                                             onClick={() => openEdit(u)}
                                                         >
                                                             <Edit2 className="w-4 h-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="danger"
+                                                            className="px-2 py-1"
+                                                            onClick={() => {
+                                                                setError('');
+                                                                setAdminPassword('');
+                                                                setDeleteModal(u);
+                                                            }}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
                                                         </Button>
                                                         <Button
                                                             variant="secondary"
@@ -270,6 +287,88 @@ export function AdminModules() {
                     <div className="flex justify-end gap-2 pt-4">
                         <Button variant="secondary" onClick={() => setEditModal(null)}>Cancelar</Button>
                         <Button loading={saving} onClick={handleEditUser}>Guardar Cambios</Button>
+                    </div>
+                </div>
+            </Modal>
+            {/* Modal de Eliminación Permanente */}
+            <Modal open={!!deleteModal} onClose={() => !verifying && setDeleteModal(null)} title="ELIMINACIÓN PERMANENTE">
+                <div className="space-y-4">
+                    <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex gap-3 text-red-700">
+                        <AlertTriangle className="w-6 h-6 flex-shrink-0" />
+                        <div>
+                            <p className="font-bold">¡ADVERTENCIA CRÍTICA!</p>
+                            <p className="text-sm">
+                                Estás a punto de eliminar permanentemente la cuenta de <strong>{deleteModal?.email}</strong>.
+                                Esta acción es <strong>IRREVERSIBLE</strong> y borrará:
+                            </p>
+                            <ul className="text-xs list-disc ml-4 mt-2 space-y-1">
+                                <li>Configuración de la bodega y módulos</li>
+                                <li>Catálogos (Productores, Clientes, Variedades)</li>
+                                <li>Toda la producción (Huertas y Manejos)</li>
+                                <li>Inventario, Entradas y Salidas/Ventas</li>
+                                <li>Equipos y Mantenimientos</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                        <p className="text-xs font-bold text-slate-500 uppercase mb-2">Confirmación de Seguridad</p>
+                        <p className="text-sm text-slate-600 mb-3">Ingresa tu contraseña de Súper Administrador para proceder:</p>
+                        <Input
+                            type="password"
+                            placeholder="Tu contraseña de administrador"
+                            value={adminPassword}
+                            onChange={e => setAdminPassword(e.target.value)}
+                        />
+                        <ErrorBanner error={error} />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                        <Button variant="secondary" onClick={() => setDeleteModal(null)} disabled={verifying}>Cancelar</Button>
+                        <Button
+                            variant="danger"
+                            loading={verifying}
+                            onClick={async () => {
+                                if (!adminPassword) { setError('Debes ingresar tu contraseña'); return; }
+                                setVerifying(true); setError('');
+                                try {
+                                    // 1. Verificar identidad del Super Admin
+                                    await signInWithEmailAndPassword(auth, userData.email, adminPassword);
+
+                                    // 2. Ejecutar limpieza profunda
+                                    const tid = deleteModal.tenant_id;
+                                    const collectionsToClean = [
+                                        'productores', 'clientes', 'variedades',
+                                        'huertas', 'manejo_trabajos',
+                                        'registro_entradas', 'detalle_entradas', 'detalle_salidas',
+                                        'equipo', 'mantenimientos'
+                                    ];
+
+                                    for (const coll of collectionsToClean) {
+                                        const q = query(collection(db, coll), where('tenant_id', '==', tid));
+                                        const snap = await getDocs(q);
+                                        const batch = writeBatch(db);
+                                        snap.docs.forEach(d => batch.delete(d.ref));
+                                        await batch.commit();
+                                    }
+
+                                    // 3. Eliminar documento de usuario principal
+                                    await setDoc(doc(db, 'usuarios', deleteModal.id), { status: 'deleted', deletedAt: new Date().toISOString() }, { merge: true });
+                                    // Nota: En un entorno real se usaría Admin SDK para borrar de Auth. 
+                                    // Aquí lo marcamos como borrado y ocultamos.
+
+                                    setSuccess('Usuario y toda su información eliminada correctamente.');
+                                    setDeleteModal(null);
+                                    setAdminPassword('');
+                                } catch (e) {
+                                    setError(e);
+                                } finally {
+                                    setVerifying(false);
+                                }
+                            }}
+                        >
+                            ELIMINAR TODO DEFINITIVAMENTE
+                        </Button>
                     </div>
                 </div>
             </Modal>
