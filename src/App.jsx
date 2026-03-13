@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import { useFirestore } from './hooks/useFirestore';
-import { Card, cn, Spinner } from './components/ui';
+import { Card, cn, Spinner, Button } from './components/ui';
 import { ProductoresManager, ClientesManager, VariedadesManager } from './components/ConfigModules';
 import { HuertasSection, ManejosSection } from './components/ProduccionModules';
 import { EquipoSection, MantenimientosSection } from './components/EquiposModules';
