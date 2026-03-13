@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { db, secondaryAuth } from '../firebase';
+import { db, secondaryAuth, auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Card, SectionHeader, StatusBadge, EmptyState, Spinner, Button, Modal, Input, Select, ErrorBanner, SuccessBanner, Checkbox } from './ui';
 import { ShieldCheck, Users, Plus, Edit2, Trash2, AlertTriangle } from 'lucide-react';
@@ -345,8 +345,8 @@ export function AdminModules() {
                                     ];
 
                                     for (const coll of collectionsToClean) {
-                                        const q = query(collection(db, coll), where('tenant_id', '==', tid));
-                                        const snap = await getDocs(q);
+                                        const collRef = collection(db, `artifacts/${tid}/public/data/${coll}`);
+                                        const snap = await getDocs(collRef);
                                         const batch = writeBatch(db);
                                         snap.docs.forEach(d => batch.delete(d.ref));
                                         await batch.commit();

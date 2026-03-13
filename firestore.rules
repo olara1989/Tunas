@@ -1,14 +1,41 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow authenticated users (including anonymous) to read/write all data
-    match /artifacts/{appId}/public/data/{collection}/{document=**} {
-      allow read, write: if request.auth != null;
-    }
     
-    // Allow users to read and write their user profiles
+    // Función para obtener los datos del usuario actual de forma segura
+    function getCurrentUserDoc() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    // Admins tienen acceso total
+    match /{document=**} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        getCurrentUserDoc().rol == 'admin';
+    }
+
+    // Perfiles de usuario
     match /usuarios/{userId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Colecciones anidadas en artifacts (Usado por la app)
+    match /artifacts/{tenantId}/{document=**} {
+      allow read, write: if request.auth != null && (
+        // Acceso si el tenantId coincide con el del usuario
+        (exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) && 
+         getCurrentUserDoc().tenant_id == tenantId)
+      );
+    }
+
+    // Colecciones raíz (Por si acaso se usan)
+    match /{collection}/{docId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        (
+          (resource == null || resource.data.tenant_id == getCurrentUserDoc().tenant_id) &&
+          (request.resource == null || request.resource.data.tenant_id == getCurrentUserDoc().tenant_id)
+        );
     }
   }
 }
