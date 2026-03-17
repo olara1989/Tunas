@@ -498,9 +498,17 @@ export function ConsolidadorSection({ clientes, variedades }) {
     const defaultModo = userData?.bodega_info?.tipo_produccion || 'Caja';
 
     const { data: vNodes, updateNode: updateVariety } = useFirestore('variedades');
-    const [cart, setCart] = useState([]); // Array of {detalleEntrada, cantidad, precio_dia}
-    const [clienteId, setClienteId] = useState('');
-    const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+    const [cart, setCart] = useState(() => {
+        const saved = localStorage.getItem('tunas_sale_cart');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [clienteId, setClienteId] = useState(() => localStorage.getItem('tunas_sale_cliente') || '');
+    const [fecha, setFecha] = useState(() => localStorage.getItem('tunas_sale_fecha') || new Date().toISOString().split('T')[0]);
+    const [saleContext, setSaleContext] = useState(() => {
+        const saved = localStorage.getItem('tunas_sale_context');
+        return saved ? JSON.parse(saved) : null;
+    });
+
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -517,16 +525,41 @@ export function ConsolidadorSection({ clientes, variedades }) {
             setCurrentVariety(prev => ({ ...prev, presentacion: userData.bodega_info.tipo_produccion }));
         }
     }, [userData]);
-    const [saleContext, setSaleContext] = useState(null);
+
     const [updateConfirm, setUpdateConfirm] = useState(null); // { changes: [{vId, changes:[]}] }
+
+    // Persist session to localStorage
+    useEffect(() => {
+        localStorage.setItem('tunas_sale_cart', JSON.stringify(cart));
+        localStorage.setItem('tunas_sale_cliente', clienteId);
+        localStorage.setItem('tunas_sale_fecha', fecha);
+        localStorage.setItem('tunas_sale_context', JSON.stringify(saleContext));
+    }, [cart, clienteId, fecha, saleContext]);
+
+    const clearSession = () => {
+        setCart([]);
+        setClienteId('');
+        setSaleContext(null);
+        localStorage.removeItem('tunas_sale_cart');
+        localStorage.removeItem('tunas_sale_cliente');
+        localStorage.removeItem('tunas_sale_fecha');
+        localStorage.removeItem('tunas_sale_context');
+    };
 
 
 
     // Only show disponibles (almacenada or en_proceso) with boxes still available
     // AND filtered by selected varieties if saleContext exists
+    // AND excluding lots from paid entries (liquidados)
     const disponibles = useMemo(() =>
         detalles.filter(d => {
+            // Filter by selected varieties
             const matchesVariety = !saleContext || saleContext.varieties.some(v => v.variedad_id === d.variedad_id);
+            
+            // Check if the parent entry is already paid (liquidado)
+            const parentEntry = entradas.find(e => e.id === d.registro_entrada_id);
+            const isLiquidado = parentEntry?.status === 'pagado';
+
             const disponible = d.cantidad_recibida - (d.cantidad_vendida || 0) - (d.merma || 0);
 
             // Filter by search term
@@ -535,9 +568,9 @@ export function ConsolidadorSection({ clientes, variedades }) {
                 d.tarima_no?.toString().includes(searchStr) ||
                 variedades.find(v => v.id === d.variedad_id)?.nombre?.toLowerCase().includes(searchStr);
 
-            return (d.status === 'almacenada' || d.status === 'en_proceso') && disponible > 0 && matchesVariety && matchesSearch;
+            return !isLiquidado && (d.status === 'almacenada' || d.status === 'en_proceso') && disponible > 0 && matchesVariety && matchesSearch;
         }),
-        [detalles, saleContext, searchTerm, variedades]
+        [detalles, entradas, saleContext, searchTerm, variedades]
     );
 
     const inCart = (id) => cart.find(c => c.detalle.id === id);
@@ -548,19 +581,19 @@ export function ConsolidadorSection({ clientes, variedades }) {
         setCart(p => [...p, {
             detalle: det,
             cantidad: det.cantidad_recibida - det.cantidad_vendida - det.merma,
-            precio_dia: config?.precio_venta || det.precio_venta_sugerido || 0
+            precio_dia: config?.precio_venta || det.precio_venta_sugerido || 0,
+            terminarLote: false
         }]);
     };
 
     const removeFromCart = (id) => setCart(p => p.filter(c => c.detalle.id !== id));
 
-    const updateCartItem = (id, field, val) => setCart(p => p.map(c => c.detalle.id === id ? { ...c, [field]: Number(val) } : c));
+    const updateCartItem = (id, field, val) => setCart(p => p.map(c => c.detalle.id === id ? { ...c, [field]: field === 'terminarLote' ? val : Number(val) } : c));
 
     const total = useMemo(() => cart.reduce((s, c) => s + (c.cantidad * c.precio_dia), 0), [cart]);
 
     const handleStartSetup = () => {
-        setClienteId('');
-        setCart([]);
+        clearSession();
         setSetupForm({ cliente_id: '', varieties: [] });
         setCurrentVariety({
             variedad_id: variedades[0]?.id || '',
@@ -574,10 +607,27 @@ export function ConsolidadorSection({ clientes, variedades }) {
 
     const addVarietyToSetup = () => {
         if (!currentVariety.variedad_id) return;
+        
+        // Evitar duplicados
+        if (setupForm.varieties.some(v => v.variedad_id === currentVariety.variedad_id)) {
+            setError('Esta variedad ya ha sido añadida.');
+            return;
+        }
+
         setSetupForm(p => ({
             ...p,
             varieties: [...p.varieties, { ...currentVariety, id: Date.now() }]
         }));
+        
+        // Reset temp variety with defaults but keeping presentation
+        setCurrentVariety(prev => ({
+            ...prev,
+            variedad_id: '',
+            precio_venta: 0,
+            precio_compra: 0,
+            kilos_por_caja: 25
+        }));
+        setError('');
     };
 
     const removeVarietyFromSetup = (id) => {
@@ -657,11 +707,12 @@ export function ConsolidadorSection({ clientes, variedades }) {
                 const disponible = item.detalle.cantidad_recibida - newVendido - item.detalle.merma;
                 await updateDetalle(item.detalle.id, {
                     cantidad_vendida: newVendido,
-                    status: disponible <= 0 ? 'completa' : 'en_proceso',
+                    status: (item.terminarLote || disponible <= 0) ? 'completa' : 'en_proceso',
                 });
             }
 
-            setCart([]); setClienteId(''); setSaleContext(null); setSuccess('¡Salida registrada exitosamente!');
+            clearSession();
+            setSuccess('¡Salida registrada exitosamente!');
             setTimeout(() => setSuccess(''), 4000);
         } catch (e) { setError(e); }
         finally { setSaving(false); }
@@ -735,9 +786,18 @@ export function ConsolidadorSection({ clientes, variedades }) {
                                         <Input label="Cajas a vender" type="number" value={item.cantidad} onChange={e => updateCartItem(item.detalle.id, 'cantidad', e.target.value)} />
                                         <Input label="Precio del día ($)" type="number" value={item.precio_dia} onChange={e => updateCartItem(item.detalle.id, 'precio_dia', e.target.value)} />
                                     </div>
-                                    <p className="text-right text-sm font-semibold text-green-700 mt-1">
-                                        Subtotal: ${(item.cantidad * item.precio_dia).toFixed(2)}
-                                    </p>
+                                    <div className="mt-2 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox 
+                                                checked={item.terminarLote} 
+                                                onChange={checked => updateCartItem(item.detalle.id, 'terminarLote', checked)} 
+                                            />
+                                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">Cerrar este lote (Barrida)</span>
+                                        </div>
+                                        <p className="text-right text-sm font-semibold text-green-700">
+                                            Subtotal: ${(item.cantidad * item.precio_dia).toFixed(2)}
+                                        </p>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -752,7 +812,7 @@ export function ConsolidadorSection({ clientes, variedades }) {
                         )}
 
                         <div className="flex gap-2">
-                            <Button variant="secondary" className="flex-1" onClick={() => setSaleContext(null)}>Cancelar Proceso</Button>
+                            <Button variant="secondary" className="flex-1" onClick={clearSession}>Cancelar Proceso</Button>
                             <Button loading={saving} onClick={handleRegistrarSalida} className="flex-[2] py-3">
                                 <ShoppingCart className="w-5 h-5" /> Registrar Salida
                             </Button>
@@ -762,138 +822,126 @@ export function ConsolidadorSection({ clientes, variedades }) {
             )}
 
             {/* Modal de Configuración de Venta */}
-            <Modal open={setupModal} onClose={() => setSetupModal(false)} title="Configurar venta / barrida nueva">
-                <div className="space-y-4 max-h-[85vh] flex flex-col pr-1">
-                    <SearchableSelect label="Cliente" options={clientes.map(c => ({ value: c.id, label: c.nombre }))} value={setupForm.cliente_id || ''} onChange={e => setSetupForm(p => ({ ...p, cliente_id: e.target.value }))} />
+            <Modal open={setupModal} onClose={() => setSetupModal(false)} title="Configurar venta / barrida nueva" size="xl">
+                <div className="space-y-6">
+                    <ErrorBanner error={error} />
+                    
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                        <SearchableSelect 
+                            label="Seleccionar Cliente" 
+                            options={clientes.map(c => ({ value: c.id, label: c.nombre }))} 
+                            value={setupForm.cliente_id || ''} 
+                            onChange={e => setSetupForm(p => ({ ...p, cliente_id: e.target.value }))} 
+                        />
+                    </div>
 
-                    <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl">
-                        <table className="w-full text-sm text-left border-collapse">
-                            <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold sticky top-0 z-10 border-b border-slate-200">
-                                <tr>
-                                    <th className="px-3 py-3 text-center">En Venta</th>
-                                    <th className="px-3 py-3">Variedad</th>
-                                    <th className="px-3 py-3">P. Venta ($)</th>
-                                    <th className="px-3 py-3">P. Compra ($)</th>
-                                    <th className="px-3 py-3">Presentación</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 bg-white">
-                                {[...variedades].sort((a, b) => a.nombre.localeCompare(b.nombre)).map(v => {
-                                    const isSelected = setupForm.varieties.some(sv => sv.variedad_id === v.id);
-                                    const config = setupForm.varieties.find(sv => sv.variedad_id === v.id);
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b pb-2">
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                <Scale className="w-4 h-4 text-green-500" /> Variedades en esta operación
+                            </h3>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">{setupForm.varieties.length} añadidas</span>
+                        </div>
 
-                                    return (
-                                        <tr key={v.id} className={cn("transition-colors", isSelected ? "bg-green-50/30" : "bg-white opacity-60")}>
-                                            <td className="px-3 py-3 text-center w-16">
-                                                <Checkbox
-                                                    checked={isSelected}
-                                                    onChange={(checked) => {
-                                                        if (checked) {
-                                                            setSetupForm(p => ({
-                                                                ...p,
-                                                                varieties: [...p.varieties, {
-                                                                    id: Date.now() + Math.random(),
-                                                                    variedad_id: v.id,
-                                                                    precio_venta: v.precio_venta || 0,
-                                                                    precio_compra: v.precio_compra || 0,
-                                                                    presentacion: v.presentacion_default || 'Caja',
-                                                                    kilos_por_caja: 25
-                                                                }]
-                                                            }));
-                                                        } else {
-                                                            setSetupForm(p => ({
-                                                                ...p,
-                                                                varieties: p.varieties.filter(sv => sv.variedad_id !== v.id)
-                                                            }));
-                                                        }
-                                                    }}
-                                                />
-                                            </td>
-                                            <td className="px-3 py-3">
-                                                <p className="font-semibold text-slate-900">{v.nombre}</p>
-                                                <p className="text-[10px] text-slate-400 capitalize">Base: ${v.precio_venta} / ${v.precio_compra}</p>
-                                            </td>
-                                            <td className="px-3 py-3 w-28">
-                                                <Input
-                                                    type="number"
-                                                    disabled={!isSelected}
-                                                    className="w-full text-sm py-1.5"
-                                                    value={config?.precio_venta || ''}
-                                                    onChange={e => {
-                                                        const val = e.target.value;
-                                                        setSetupForm(p => ({
-                                                            ...p,
-                                                            varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, precio_venta: val } : sv)
-                                                        }));
-                                                    }}
-                                                />
-                                            </td>
-                                            <td className="px-3 py-3 w-28">
-                                                <Input
-                                                    type="number"
-                                                    disabled={!isSelected}
-                                                    className="w-full text-sm py-1.5"
-                                                    value={config?.precio_compra || ''}
-                                                    onChange={e => {
-                                                        const val = e.target.value;
-                                                        setSetupForm(p => ({
-                                                            ...p,
-                                                            varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, precio_compra: val } : sv)
-                                                        }));
-                                                    }}
-                                                />
-                                            </td>
-                                            <td className="px-3 py-3 min-w-[140px]">
-                                                <div className="flex flex-col gap-2">
-                                                    <div className="flex bg-slate-100 rounded-lg p-0.5">
-                                                        <button
-                                                            disabled={!isSelected}
-                                                            onClick={() => {
-                                                                setSetupForm(p => ({
-                                                                    ...p,
-                                                                    varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, presentacion: 'Caja' } : sv)
-                                                                }));
-                                                            }}
-                                                            className={cn("flex-1 px-2 py-1 rounded-md text-[10px] uppercase font-bold transition-all",
-                                                                isSelected && config?.presentacion === 'Caja' ? "bg-white text-green-700 shadow-sm" : "text-slate-500")}
-                                                        >Caja</button>
-                                                        <button
-                                                            disabled={!isSelected}
-                                                            onClick={() => {
-                                                                setSetupForm(p => ({
-                                                                    ...p,
-                                                                    varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, presentacion: 'Kilo' } : sv)
-                                                                }));
-                                                            }}
-                                                            className={cn("flex-1 px-2 py-1 rounded-md text-[10px] uppercase font-bold transition-all",
-                                                                isSelected && config?.presentacion === 'Kilo' ? "bg-white text-green-700 shadow-sm" : "text-slate-500")}
-                                                        >Kilo</button>
-                                                    </div>
-                                                    {isSelected && config?.presentacion === 'Caja' && (
-                                                        <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-                                                            <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5 ml-1">Kilos p/ Caja</p>
-                                                            <Input
-                                                                type="number"
-                                                                className="w-full text-sm py-1"
-                                                                placeholder="KG"
-                                                                value={config?.kilos_por_caja || ''}
-                                                                onChange={e => {
-                                                                    const val = e.target.value;
-                                                                    setSetupForm(p => ({
-                                                                        ...p,
-                                                                        varieties: p.varieties.map(sv => sv.variedad_id === v.id ? { ...sv, kilos_por_caja: val } : sv)
-                                                                    }));
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                        <div className="border rounded-2xl overflow-hidden bg-white shadow-sm border-slate-200">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500">
+                                        <th className="px-4 py-3 text-left font-bold">Variedad</th>
+                                        <th className="px-4 py-3 text-right font-bold w-32">P. Venta ($)</th>
+                                        <th className="px-4 py-3 text-right font-bold w-32">P. Compra ($)</th>
+                                        <th className="px-4 py-3 text-left font-bold w-32">Modo</th>
+                                        <th className="px-4 py-3 text-right font-bold w-32">Kg/Caja</th>
+                                        <th className="px-4 py-3 text-center w-16"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {/* Adder Row */}
+                                    <tr className="bg-green-50/30">
+                                        <td className="px-2 py-2">
+                                            <Select
+                                                options={variedades.map(v => ({ value: v.id, label: v.nombre }))}
+                                                value={currentVariety.variedad_id}
+                                                onChange={e => {
+                                                    const v = variedades.find(x => x.id === e.target.value);
+                                                    setCurrentVariety(p => ({ 
+                                                        ...p, 
+                                                        variedad_id: e.target.value, 
+                                                        precio_venta: v?.precio_venta || 0,
+                                                        precio_compra: v?.precio_compra || 0,
+                                                        presentacion: v?.presentacion_default || defaultModo
+                                                    }));
+                                                }}
+                                                className="border-none bg-transparent focus:ring-0"
+                                            />
+                                        </td>
+                                        <td className="px-2 py-2 text-right">
+                                            <input
+                                                type="number"
+                                                placeholder="0.00"
+                                                value={currentVariety.precio_venta}
+                                                onChange={e => setCurrentVariety(p => ({ ...p, precio_venta: e.target.value }))}
+                                                className="w-full text-right bg-transparent border-none focus:ring-0 text-sm font-semibold text-green-700"
+                                            />
+                                        </td>
+                                        <td className="px-2 py-2 text-right">
+                                            <input
+                                                type="number"
+                                                placeholder="0.00"
+                                                value={currentVariety.precio_compra}
+                                                onChange={e => setCurrentVariety(p => ({ ...p, precio_compra: e.target.value }))}
+                                                className="w-full text-right bg-transparent border-none focus:ring-0 text-sm font-semibold text-orange-600"
+                                            />
+                                        </td>
+                                        <td className="px-2 py-2">
+                                            <Select
+                                                options={[{ value: 'Caja', label: 'Cajas' }, { value: 'Kilo', label: 'Kilos' }]}
+                                                value={currentVariety.presentacion}
+                                                onChange={e => setCurrentVariety(p => ({ ...p, presentacion: e.target.value }))}
+                                                className="border-none bg-transparent focus:ring-0"
+                                            />
+                                        </td>
+                                        <td className="px-2 py-2 text-right">
+                                            <input
+                                                type="number"
+                                                placeholder="Kg"
+                                                value={currentVariety.kilos_por_caja}
+                                                disabled={currentVariety.presentacion !== 'Caja'}
+                                                onChange={e => setCurrentVariety(p => ({ ...p, kilos_por_caja: e.target.value }))}
+                                                className="w-full text-right bg-transparent border-none focus:ring-0 text-sm disabled:opacity-30"
+                                            />
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                            <button onClick={addVarietyToSetup} className="bg-green-600 hover:bg-green-700 text-white rounded-lg w-8 h-8 flex items-center justify-center shadow-sm transition-colors mx-auto">
+                                                <Plus className="w-5 h-5" />
+                                            </button>
+                                        </td>
+                                    </tr>
+
+                                    {setupForm.varieties.length === 0 ? (
+                                        <tr><td colSpan="6" className="py-10 text-center text-slate-400">Ninguna variedad añadida a esta operación</td></tr>
+                                    ) : (
+                                        setupForm.varieties.map(sv => {
+                                            const v = variedades.find(x => x.id === sv.variedad_id);
+                                            return (
+                                                <tr key={sv.id} className="hover:bg-slate-50/50">
+                                                    <td className="px-4 py-3 font-medium text-slate-800">{v?.nombre}</td>
+                                                    <td className="px-4 py-3 text-right font-bold text-green-700">${Number(sv.precio_venta).toFixed(2)}</td>
+                                                    <td className="px-4 py-3 text-right font-bold text-orange-600">${Number(sv.precio_compra).toFixed(2)}</td>
+                                                    <td className="px-4 py-3 text-left">{sv.presentacion}</td>
+                                                    <td className="px-4 py-3 text-right">{sv.presentacion === 'Caja' ? sv.kilos_por_caja : '–'}</td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <button onClick={() => removeVarietyFromSetup(sv.id)} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 bg-white">

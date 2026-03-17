@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Card, Input, Button, ErrorBanner } from './ui';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
 
 export default function Login() {
     const { login } = useAuth();
@@ -19,16 +17,7 @@ export default function Login() {
         try {
             await login(email, password);
         } catch (err) {
-            // Auto-registro para demo
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
-                try {
-                    await createUserWithEmailAndPassword(auth, email, password);
-                } catch (regErr) {
-                    setError(regErr);
-                }
-            } else {
-                setError(err);
-            }
+            setError(err);
         } finally {
             setLoading(false);
         }
@@ -71,7 +60,7 @@ export default function Login() {
                         />
 
                         <Button type="submit" className="w-full py-2.5" loading={loading}>
-                            <LogIn className="w-4 h-4 mr-2" /> Iniciar Sesión / Registrarse
+                            <LogIn className="w-4 h-4 mr-2" /> Iniciar Sesión
                         </Button>
                     </form>
                 </Card>
