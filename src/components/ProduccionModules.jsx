@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Tractor, Wrench, ChevronDown, ChevronUp, CloudRain, MapPin, Eye, Info, Calendar, BoxSelect } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
+import { useAuth } from '../context/AuthContext';
 import {
-    Card, Button, Input, Select, Modal, Textarea,
+    Card, Button, Input, Select, Modal, Textarea, RadioGroup, Checkbox,
     ErrorBanner, SuccessBanner, EmptyState, Spinner, SectionHeader, StatusBadge, cn
 } from './ui';
 
@@ -163,6 +164,7 @@ function RainForecast({ lat, lng, days = 7, compact = true }) {
 /* Huertas section */
 export function HuertasSection({ variedades }) {
     const { data: huertas, loading, error, addNode, updateNode, deleteNode } = useFirestore('huertas');
+    const { data: manejos } = useFirestore('manejos');
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState({
@@ -231,7 +233,30 @@ export function HuertasSection({ variedades }) {
             <ErrorBanner error={error} /><SuccessBanner message={success} />
             {loading ? <Spinner /> : filteredHuertas.length === 0 ? <EmptyState icon={Tractor} message={searchTerm ? "No se encontraron huertas" : "No hay huertas registradas"} /> : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {filteredHuertas.map(h => (
+                    {filteredHuertas.map(h => {
+                        const hsManejos = manejos?.filter(m => m.huerta_id === h.id) || [];
+                        const gastos = hsManejos.reduce((acc, m) => acc + Number(m.costo || 0), 0);
+                        
+                        let totalCajas = 0;
+                        let totalKilos = 0;
+                        let ingresos = 0;
+
+                        hsManejos.filter(m => m.tipo_trabajo === 'Cosecha').forEach(m => {
+                            const cant = Number(m.cantidad_cosechada || 0);
+                            if (m.unidad === 'Kilo') totalKilos += cant;
+                            else totalCajas += cant;
+                            
+                            const v = variedades.find(v => v.id === m.variedad_id);
+                            const precio = m.ingresar_bodega !== false 
+                                ? Number(v?.precio_compra || 0)
+                                : Number(v?.precio_venta || 0); 
+                                
+                            ingresos += (cant * precio);
+                        });
+
+                        const ganancias = ingresos - gastos;
+
+                        return (
                         <Card key={h.id}>
                             <p className="font-semibold text-slate-900 text-lg">{h.nombre}</p>
                             <p className="text-sm text-slate-500 mt-1">📍 {h.ubicacion} · {h.superficie} ha</p>
@@ -250,6 +275,28 @@ export function HuertasSection({ variedades }) {
                                 <p className="text-xs text-green-700 mt-2 bg-green-50 rounded-lg px-2 py-1 inline-block">🌵 {getVariedadNombres(h.variedades_ids)}</p>
                             )}
 
+                            <div className="grid grid-cols-2 gap-2 mt-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <div className="text-center">
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Gastos M.</p>
+                                    <p className="text-sm font-bold text-red-500">${gastos.toLocaleString()}</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Cosecha</p>
+                                    <p className="text-xs font-bold text-green-600 truncate mt-0.5">
+                                        {totalCajas > 0 && `${totalCajas} cx`} 
+                                        {totalCajas > 0 && totalKilos > 0 && ' | '}
+                                        {totalKilos > 0 && `${totalKilos} kg`}
+                                        {totalCajas === 0 && totalKilos === 0 && '0'}
+                                    </p>
+                                </div>
+                                <div className="col-span-2 text-center border-t border-slate-200 mt-1 pt-2">
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase">Ganancias Estimadas</p>
+                                    <p className={`text-base font-bold ${ganancias >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                        ${ganancias.toLocaleString()}
+                                    </p>
+                                </div>
+                            </div>
+
                             <RainForecast lat={h.lat} lng={h.lng} />
 
                             <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
@@ -264,7 +311,7 @@ export function HuertasSection({ variedades }) {
                                 </Button>
                             </div>
                         </Card>
-                    ))}
+                    )})}
                 </div>
             )}
 
@@ -328,8 +375,49 @@ export function HuertasSection({ variedades }) {
 
             {/* Modal de Detalles Completos */}
             <Modal open={!!viewing} onClose={() => setViewing(null)} title={`Ficha Técnica: ${viewing?.nombre}`} size="2xl">
-                {viewing && (
+                {viewing && (() => {
+                    const hsManejos = manejos?.filter(m => m.huerta_id === viewing.id) || [];
+                    const gastos = hsManejos.reduce((acc, m) => acc + Number(m.costo || 0), 0);
+                    let totalCajas = 0, totalKilos = 0, ingresos = 0;
+                    hsManejos.filter(m => m.tipo_trabajo === 'Cosecha').forEach(m => {
+                        const cant = Number(m.cantidad_cosechada || 0);
+                        if (m.unidad === 'Kilo') totalKilos += cant;
+                        else totalCajas += cant;
+                        const v = variedades.find(v => v.id === m.variedad_id);
+                        const precio = m.ingresar_bodega !== false ? Number(v?.precio_compra || 0) : Number(v?.precio_venta || 0); 
+                        ingresos += (cant * precio);
+                    });
+                    const ganancias = ingresos - gastos;
+
+                    return (
                     <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Card className="bg-blue-50 border-none">
+                                <div className="text-center">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase">Gastos Totales</p>
+                                    <p className="text-xl font-bold text-red-500">${gastos.toLocaleString()}</p>
+                                </div>
+                            </Card>
+                            <Card className="bg-green-50 border-none">
+                                <div className="text-center">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase">Cosecha Total</p>
+                                    <p className="text-lg font-bold text-green-700">
+                                        {totalCajas > 0 && `${totalCajas} cx `} 
+                                        {totalKilos > 0 && `${totalKilos} kg`}
+                                        {totalCajas === 0 && totalKilos === 0 && '0'}
+                                    </p>
+                                </div>
+                            </Card>
+                            <Card className={`${ganancias >= 0 ? 'bg-green-100' : 'bg-red-100'} border-none`}>
+                                <div className="text-center">
+                                    <p className="text-[10px] font-bold text-slate-600 uppercase">Ganancias Estimadas</p>
+                                    <p className={`text-xl font-bold ${ganancias >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                        ${ganancias.toLocaleString()}
+                                    </p>
+                                </div>
+                            </Card>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <Card className="bg-slate-50 border-none">
                                 <div className="flex items-center gap-3">
@@ -366,6 +454,83 @@ export function HuertasSection({ variedades }) {
                             </Card>
                         </div>
 
+                        <div className="mt-8">
+                            <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <Tractor className="w-5 h-5 text-slate-600" /> Historial Financiero Detallado
+                            </h4>
+                            <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto shadow-sm">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[10px] uppercase font-bold tracking-wider">
+                                        <tr>
+                                            <th className="px-4 py-3">Fecha</th>
+                                            <th className="px-4 py-3">Actividad</th>
+                                            <th className="px-4 py-3 text-right">Gasto</th>
+                                            <th className="px-4 py-3 text-center">Cosecha</th>
+                                            <th className="px-4 py-3 text-right">Ingreso Est.</th>
+                                            <th className="px-4 py-3 text-right">Beneficio Est.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {[...hsManejos].sort((a,b) => new Date(b.fecha_inicio||0) - new Date(a.fecha_inicio||0)).map((m, i) => {
+                                            const gasto = Number(m.costo || 0);
+                                            const isCosecha = m.tipo_trabajo === 'Cosecha';
+                                            const v = isCosecha ? variedades.find(v => v.id === m.variedad_id) : null;
+                                            const cant = Number(m.cantidad_cosechada || 0);
+                                            const precio = isCosecha ? (m.ingresar_bodega !== false ? Number(v?.precio_compra || 0) : Number(v?.precio_venta || 0)) : 0;
+                                            const ingreso = isCosecha ? (cant * precio) : 0;
+                                            const beneficio = ingreso - gasto;
+
+                                            return (
+                                                <tr key={m.id || i} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-4 py-3 whitespace-nowrap text-slate-600">{m.fecha_inicio || '–'}</td>
+                                                    <td className="px-4 py-3 font-medium text-slate-900">
+                                                        {m.tipo_trabajo}
+                                                        {isCosecha && v && <span className="ml-2 text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{v.nombre}</span>}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right text-red-500 font-medium">
+                                                        {gasto > 0 ? `-$${gasto.toLocaleString()}` : '–'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        {isCosecha && cant > 0 ? (
+                                                            <span className="font-semibold text-green-600 text-xs bg-green-50 px-2 py-0.5 rounded-full">{cant} {m.unidad === 'Kilo' ? 'kg' : 'cx'}</span>
+                                                        ) : <span className="text-slate-300">–</span>}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right text-green-600 font-medium">
+                                                        {ingreso > 0 ? `+$${ingreso.toLocaleString()}` : '–'}
+                                                    </td>
+                                                    <td className={`px-4 py-3 text-right font-bold ${beneficio > 0 ? 'text-green-600' : beneficio < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                                                        {beneficio > 0 ? '+' : ''}${beneficio.toLocaleString()}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {hsManejos.length === 0 && (
+                                            <tr>
+                                                <td colSpan="6" className="px-4 py-8 text-center text-slate-500">No hay registros de manejos en esta huerta</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                    {hsManejos.length > 0 && (
+                                        <tfoot className="bg-slate-50 border-t border-slate-200 font-bold">
+                                            <tr>
+                                                <td colSpan="2" className="px-4 py-3 text-right uppercase text-[10px] text-slate-500">Totales</td>
+                                                <td className="px-4 py-3 text-right text-red-600">-${gastos.toLocaleString()}</td>
+                                                <td className="px-4 py-3 text-center text-green-700 text-xs">
+                                                    {totalCajas > 0 && `${totalCajas} cx `} 
+                                                    {totalKilos > 0 && `${totalKilos} kg`}
+                                                    {totalCajas === 0 && totalKilos === 0 && '–'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-green-600">+${ingresos.toLocaleString()}</td>
+                                                <td className={`px-4 py-3 text-right ${ganancias >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                    {ganancias > 0 ? '+' : ''}${ganancias.toLocaleString()}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    )}
+                                </table>
+                            </div>
+                        </div>
+
                         <div className="space-y-3">
                             <h4 className="font-bold text-slate-900 flex items-center gap-2">
                                 <MapPin className="w-4 h-4 text-red-500" /> Ubicación Geográfica
@@ -377,8 +542,9 @@ export function HuertasSection({ variedades }) {
                                     <p className="text-[10px] font-mono text-slate-500 mt-1">Coordenadas: {viewing.lat}, {viewing.lng}</p>
                                 </div>
                                 <Button
+                                    variant="outline"
                                     onClick={() => window.open(`https://www.google.com/maps?q=${viewing.lat},${viewing.lng}`, '_blank')}
-                                    className="bg-white text-slate-900 shadow-sm border border-slate-200"
+                                    className="shadow-sm bg-white"
                                 >
                                     Abrir en Navegador GPS
                                 </Button>
@@ -394,7 +560,7 @@ export function HuertasSection({ variedades }) {
                             <Button onClick={() => setViewing(null)}>Cerrar Ficha Técnica</Button>
                         </div>
                     </div>
-                )}
+                )})()}
             </Modal>
         </div>
     );
@@ -402,7 +568,11 @@ export function HuertasSection({ variedades }) {
 
 /* Manejos section */
 export function ManejosSection({ huertas, variedades }) {
+    const { userData } = useAuth();
     const { data: manejos, loading, error, addNode, deleteNode } = useFirestore('manejos');
+    const { data: entradas, addNode: addEntrada } = useFirestore('registro_entradas');
+    const { addNode: addDetalle } = useFirestore('detalle_entradas');
+    const { data: productores, addNode: addProductor } = useFirestore('productores');
     const [modalOpen, setModalOpen] = useState(false);
     const [form, setForm] = useState({});
     const [saving, setSaving] = useState(false);
@@ -418,8 +588,59 @@ export function ManejosSection({ huertas, variedades }) {
         setSaving(true); setFormError('');
         try {
             const data = { ...form };
-            if (form.tipo_trabajo !== 'Cosecha') { delete data.variedad_id; delete data.cantidad_cosechada; }
+            if (form.tipo_trabajo !== 'Cosecha') {
+                delete data.variedad_id;
+                delete data.cantidad_cosechada;
+                delete data.unidad;
+                delete data.ingresar_bodega;
+            }
             await addNode(data);
+
+            if (form.tipo_trabajo === 'Cosecha' && form.ingresar_bodega !== false) {
+                const defaultModo = userData?.bodega_info?.tipo_produccion || 'Caja';
+                const lastFolio = (entradas || []).reduce((max, e) => Math.max(max, Number(e.folio) || 0), 0);
+                const nuevoFolio = lastFolio + 1;
+
+                // Encontrar o crear productor con el nombre de la bodega
+                const bodegaNombre = userData?.bodega_info?.nombre || 'Bodega Propia';
+                let prodId = 'Cosecha Propia'; // Fallback
+                const existingProd = productores.find(p => p.nombre === bodegaNombre);
+
+                if (existingProd) {
+                    prodId = existingProd.id;
+                } else {
+                    const newProdRef = await addProductor({
+                        nombre: bodegaNombre,
+                        tipo: 'Propio',
+                        createdAt: new Date().toISOString()
+                    });
+                    prodId = newProdRef.id;
+                }
+
+                const entryRef = await addEntrada({
+                    productor_id: prodId,
+                    fecha: form.fecha_inicio || new Date().toISOString().split('T')[0],
+                    folio: nuevoFolio,
+                    monto_total_productor: 0,
+                    status: 'pagado'
+                });
+
+                const variedadSeleccionada = variedades.find(v => v.id === form.variedad_id);
+                const presentacionForm = form.unidad || defaultModo;
+                await addDetalle({
+                    registro_entrada_id: entryRef.id,
+                    variedad_id: form.variedad_id,
+                    presentacion: presentacionForm,
+                    cantidad_recibida: Number(form.cantidad_cosechada),
+                    cajas_fisicas: presentacionForm === 'Caja' ? Number(form.cantidad_cosechada) : 0,
+                    precio_venta_sugerido: Number(variedadSeleccionada?.precio_venta || 0),
+                    tarima_no: nuevoFolio,
+                    cantidad_vendida: 0,
+                    merma: 0,
+                    status: 'almacenada',
+                });
+            }
+
             setModalOpen(false); setSuccess('Manejo registrado.');
             setTimeout(() => setSuccess(''), 3000);
         } catch (e) { setFormError(e); }
@@ -454,7 +675,7 @@ export function ManejosSection({ huertas, variedades }) {
                             onChange={e => setSearchTerm(e.target.value)}
                             className="w-full sm:w-64"
                         />
-                        <Button onClick={() => { setForm({}); setModalOpen(true); }}><Plus className="w-4 h-4" /> Nuevo Manejo</Button>
+                        <Button onClick={() => { setForm({ ingresar_bodega: true }); setModalOpen(true); }}><Plus className="w-4 h-4" /> Nuevo Manejo</Button>
                     </div>
                 } />
             <ErrorBanner error={error} /><SuccessBanner message={success} />
@@ -482,7 +703,7 @@ export function ManejosSection({ huertas, variedades }) {
                                                             m.tipo_trabajo === 'Cosecha' ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"
                                                         )}>{m.tipo_trabajo}</span>
                                                         <p className="text-sm text-slate-700 mt-1">{m.fecha_inicio} → {m.fecha_fin}</p>
-                                                        {m.tipo_trabajo === 'Cosecha' && <p className="text-xs text-green-600 mt-0.5">Cosechado: {m.cantidad_cosechada} kg · {variedades.find(v => v.id === m.variedad_id)?.nombre}</p>}
+                                                        {m.tipo_trabajo === 'Cosecha' && <p className="text-xs text-green-600 mt-0.5">Cosechado: {m.cantidad_cosechada} {m.unidad || 'kg'} · {variedades.find(v => v.id === m.variedad_id)?.nombre}</p>}
                                                         {m.notas && <p className="text-xs text-slate-400 mt-0.5">{m.notas}</p>}
                                                     </div>
                                                     <div className="text-right">
@@ -505,10 +726,39 @@ export function ManejosSection({ huertas, variedades }) {
                     <ErrorBanner error={formError} />
                     <Select label="Huerta" options={huertas.map(h => ({ value: h.id, label: h.nombre }))} value={form.huerta_id || ''} onChange={e => setForm(p => ({ ...p, huerta_id: e.target.value }))} />
                     <Select label="Tipo de trabajo" options={tiposTrabajo.map(t => ({ value: t, label: t }))} value={form.tipo_trabajo || ''} onChange={e => setForm(p => ({ ...p, tipo_trabajo: e.target.value }))} />
-                    {form.tipo_trabajo === 'Cosecha' && <>
-                        <Select label="Variedad" options={variedades.map(v => ({ value: v.id, label: v.nombre }))} value={form.variedad_id || ''} onChange={e => setForm(p => ({ ...p, variedad_id: e.target.value }))} />
-                        <Input label="Cantidad cosechada (kg)" type="number" value={form.cantidad_cosechada || ''} onChange={e => setForm(p => ({ ...p, cantidad_cosechada: e.target.value }))} />
-                    </>}
+                    {form.tipo_trabajo === 'Cosecha' && (() => {
+                        const selectedHuerta = huertas.find(h => h.id === form.huerta_id);
+                        const variedadesHuerta = selectedHuerta && selectedHuerta.variedades_ids?.length > 0
+                            ? variedades.filter(v => selectedHuerta.variedades_ids.includes(v.id))
+                            : variedades;
+                        const defaultModo = userData?.bodega_info?.tipo_produccion || 'Caja';
+
+                        return (
+                            <div className="space-y-4">
+                                <Select label="Variedad" options={variedadesHuerta.map(v => ({ value: v.id, label: v.nombre }))} value={form.variedad_id || ''} onChange={e => setForm(p => ({ ...p, variedad_id: e.target.value }))} />
+
+                                <RadioGroup
+                                    label="Unidad de Cosecha"
+                                    options={[
+                                        { value: 'Caja', label: 'Cajas', icon: '📦' },
+                                        { value: 'Kilo', label: 'Kilos', icon: '⚖️' }
+                                    ]}
+                                    value={form.unidad || defaultModo}
+                                    onChange={val => setForm(p => ({ ...p, unidad: val }))}
+                                />
+
+                                <Input label={`Cantidad cosechada (${form.unidad || defaultModo})`} type="number" value={form.cantidad_cosechada || ''} onChange={e => setForm(p => ({ ...p, cantidad_cosechada: e.target.value }))} />
+
+                                <div className="pt-2">
+                                    <Checkbox
+                                        label="Ingresar esta cosecha a bodega propia automáticamente"
+                                        checked={form.ingresar_bodega !== false}
+                                        onChange={checked => setForm(p => ({ ...p, ingresar_bodega: checked }))}
+                                    />
+                                </div>
+                            </div>
+                        )
+                    })()}
                     <div className="grid grid-cols-2 gap-3">
                         <Input label="Fecha inicio" type="date" value={form.fecha_inicio || ''} onChange={e => setForm(p => ({ ...p, fecha_inicio: e.target.value }))} />
                         <Input label="Fecha fin" type="date" value={form.fecha_fin || ''} onChange={e => setForm(p => ({ ...p, fecha_fin: e.target.value }))} />

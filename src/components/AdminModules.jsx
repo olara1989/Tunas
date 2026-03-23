@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { collection, onSnapshot, doc, setDoc, updateDoc, writeBatch, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { db, secondaryAuth, auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Card, SectionHeader, StatusBadge, EmptyState, Spinner, Button, Modal, Input, Select, ErrorBanner, SuccessBanner, Checkbox } from './ui';
 import { ShieldCheck, Users, Plus, Edit2, Trash2, AlertTriangle } from 'lucide-react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { writeBatch, query, where, getDocs } from 'firebase/firestore';
 
 export function AdminModules() {
     const { userData, setActiveTenant, logout } = useAuth();
@@ -60,6 +58,24 @@ export function AdminModules() {
                     cuenta: true
                 }
             });
+
+            // Create default productor and cliente named as the warehouse
+            await addDoc(collection(db, `artifacts/${uid}/public/data/productores`), {
+                nombre: form.nombreBodega,
+                tipo: 'Propio',
+                rfc: '',
+                telefono: '',
+                createdAt: new Date().toISOString()
+            });
+
+            await addDoc(collection(db, `artifacts/${uid}/public/data/clientes`), {
+                nombre: form.nombreBodega,
+                tipo: 'Propio',
+                rfc: '',
+                telefono: '',
+                createdAt: new Date().toISOString()
+            });
+
             setSuccess('Usuario creado exitosamente.');
             setCreateModal(false); setForm({});
             setTimeout(() => setSuccess(''), 4000);
