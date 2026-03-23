@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Plus, PackageSearch, ShoppingCart, CheckCircle, ArrowRight, Trash2, Printer, FileText, Search, Scale, Box, Calendar, LayoutGrid, Eye } from 'lucide-react';
+import { Plus, PackageSearch, ShoppingCart, CheckCircle, ArrowRight, Trash2, Printer, FileText, Search, Scale, Box, Calendar, LayoutGrid, Eye, Save } from 'lucide-react';
 import { useFirestore } from '../hooks/useFirestore';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -16,6 +16,7 @@ export function EntradasSection({ productores, variedades }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [entradaModal, setEntradaModal] = useState(false);
     const [viewing, setViewing] = useState(null); // Para ver detalles y mandar a imprimir
+    const [tab, setTab] = useState('pendientes'); // 'pendientes' | 'liquidadas'
 
     const defaultModo = userData?.bodega_info?.tipo_produccion || 'Caja';
 
@@ -121,104 +122,169 @@ export function EntradasSection({ productores, variedades }) {
         const prod = productores.find(p => p.id === e.productor_id);
         const printWindow = window.open('', '_blank');
 
+        const formatCurrency = (val) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(val));
+        const formatDate = (dateValue) => {
+            if (!dateValue) return '';
+            try {
+                const d = new Date(typeof dateValue === 'string' && dateValue.length === 10 ? dateValue + 'T12:00:00' : dateValue);
+                return new Intl.DateTimeFormat('es-MX', { year: 'numeric', month: 'long', day: '2-digit' }).format(d);
+            } catch (err) {
+                return dateValue;
+            }
+        };
+
         const totalUnidades = items.reduce((s, it) => s + Number(it.cantidad_recibida || 0), 0);
         const totalCajasFisicas = items.reduce((s, it) => s + (it.presentacion === 'Kilo' ? Number(it.cajas_fisicas || 0) : Number(it.cantidad_recibida || 0)), 0);
 
-        const itemsHtml = items.map(d => `
-            <tr style="border-bottom: 1px solid #ddd;">
-                <td style="padding: 10px;">${variedades.find(v => v.id === d.variedad_id)?.nombre || 'N/A'}</td>
-                <td style="padding: 10px; text-align: right;">${d.cantidad_recibida} ${d.presentacion === 'Caja' ? 'Cajas' : 'Kg'}</td>
-                <td style="padding: 10px; text-align: right;">${d.presentacion === 'Kilo' ? (d.cajas_fisicas || 0) + ' Cajas' : (d.cantidad_recibida + ' Cajas')}</td>
-                <td style="padding: 10px; text-align: right;">${d.status === 'completa' ? '<span style="color: #16a34a; font-weight: bold;">Liquidado</span>' : '<span style="color: #ca8a04;">Pendiente</span>'}</td>
+        const itemsHtml = items.map(d => {
+            const variedad = variedades.find(v => v.id === d.variedad_id)?.nombre || 'N/A';
+            const unit = d.presentacion === 'Caja' ? 'Cajas' : 'Kg';
+            const unitario = Number(d.precio_venta_sugerido || 0);
+            const vendidas = Number(d.cantidad_vendida || 0);
+            const subtotal = vendidas * unitario;
+            
+            return `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td>${variedad}</td>
+                <td style="text-align: right;">${d.cantidad_recibida} ${unit}</td>
+                <td style="text-align: right;">${vendidas} ${unit}</td>
+                <td style="text-align: right;">${formatCurrency(unitario)}</td>
+                <td style="text-align: right; font-weight: bold; color: #166534;">${formatCurrency(subtotal)}</td>
             </tr>
-        `).join('');
+            `;
+        }).join('');
+
+        const totalPagar = items.reduce((s, it) => s + (Number(it.cantidad_vendida || 0) * Number(it.precio_venta_sugerido || 0)), 0);
+
+        const generateReceipt = (isCopy = false) => `
+            <div class="receipt ${isCopy ? 'copy-watermark' : ''}">
+                <div class="header">
+                    <div>
+                        <h1 class="title">Liquidación de Producto</h1>
+                        <p style="margin: 4px 0 0 0; color: #16a34a; font-weight: bold; font-size: 16px;">Tunas La Huerta</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="label">Folio del Lote</span>
+                        <div class="value" style="font-size: 28px; color: #166534; line-height: 1;">#${e.folio}</div>
+                    </div>
+                </div>
+                
+                <div class="info">
+                    <div>
+                        <span class="label">Productor</span>
+                        <div class="value">${prod?.nombre || 'Desconocido'}</div>
+                        <div style="margin-top: 8px;">
+                            <span class="label">Estatus de Pago</span>
+                            <div class="value" style="color: ${e.status === 'pagado' ? '#16a34a' : '#ca8a04'}">${e.status.toUpperCase()}</div>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="label">Fecha de Recepción</span>
+                        <div class="value" style="text-transform: capitalize;">${formatDate(e.fecha)}</div>
+                        <div style="margin-top: 8px;">
+                            <span class="label">Fecha de Impresión</span>
+                            <div class="value" style="text-transform: capitalize;">${formatDate(new Date())}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Variedad</th>
+                            <th style="text-align: right;">Recibido</th>
+                            <th style="text-align: right;">Vendido</th>
+                            <th style="text-align: right;">Precio Unit.</th>
+                            <th style="text-align: right;">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${itemsHtml}
+                    </tbody>
+                </table>
+
+                <div class="totals flex-grow">
+                    <div class="totals-box mt-auto inline-block">
+                        <span class="label">Resumen de Liquidación</span>
+                        <div style="margin-top: 8px;">
+                            <p style="margin: 0; font-size: 12px; color: #64748b;">Tot. Cajas Físicas Entregadas: <strong>${totalCajasFisicas}</strong></p>
+                            <p style="margin: 6px 0 0 0; font-size: 18px; color: #166534;">Total a Pagar: <strong>${formatCurrency(totalPagar)}</strong></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="footer mt-auto">
+                    <div>
+                        <div class="signature-line">Firma del Productor</div>
+                    </div>
+                    <div>
+                        <div class="signature-line">Recibe Bodega (Sello)</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px; text-align: center; color: #94a3b8; font-size: 9px;">
+                    <p>Documento generado por el Sistema de Gestión Tunas La Huerta. ${isCopy ? '<strong>COPIA</strong>' : ''}</p>
+                </div>
+            </div>
+        `;
 
         printWindow.document.write(`
             <html>
                 <head>
                     <title>Liquidación de Entrada #${e.folio}</title>
                     <style>
-                        body { font-family: 'Inter', sans-serif; padding: 40px; color: #333; line-height: 1.5; }
-                        .header { border-bottom: 3px solid #16a34a; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
-                        .title { color: #166534; margin: 0; font-size: 28px; text-transform: uppercase; letter-spacing: 1px; }
-                        .info { display: grid; grid-template-cols: 1fr 1fr; gap: 40px; margin-bottom: 40px; background: #f8fafc; padding: 20px; rounded-2xl; }
-                        .label { color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; }
-                        .value { font-size: 16px; font-weight: 600; margin-top: 4px; color: #1e293b; }
-                        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-                        th { background: #16a34a; text-align: left; padding: 12px; color: white; font-size: 11px; text-transform: uppercase; }
-                        .totals { border-top: 2px solid #e2e8f0; padding-top: 20px; display: flex; justify-content: flex-end; }
-                        .totals-box { background: #f1f5f9; padding: 15px 30px; border-radius: 12px; text-align: right; }
-                        .footer { margin-top: 80px; display: grid; grid-template-cols: 1fr 1fr; gap: 60px; text-align: center; }
-                        .signature-line { border-top: 1px solid #94a3b8; margin-top: 40px; padding-top: 10px; color: #64748b; font-size: 12px; }
+                        @page { size: letter portrait; margin: 0; }
+                        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; color: #333; line-height: 1.4; box-sizing: border-box; background: #fff; }
+                        * { box-sizing: border-box; }
+                        .page-container { width: 100%; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+                        
+                        .receipt { flex: 1; padding: 25px 35px; position: relative; overflow: hidden; display: flex; flex-direction: column; height: 50vh; }
+                        
+                        .cut-line { height: 0; border-top: 1.5px dashed #94a3b8; margin: 0; position: relative; width: 100%; display: flex; justify-content: center; align-items: center; }
+                        .cut-line::after { content: '✂ Cortar por aquí'; position: absolute; background: white; padding: 0 10px; color: #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
+                        
+                        .copy-watermark::before {
+                            content: 'COPIA';
+                            position: absolute;
+                            top: 50%;
+                            left: 50%;
+                            transform: translate(-50%, -50%) rotate(-45deg);
+                            font-size: 100px;
+                            color: rgba(0, 0, 0, 0.05);
+                            font-weight: 900;
+                            letter-spacing: 15px;
+                            z-index: -1;
+                            pointer-events: none;
+                        }
+                        
+                        .header { border-bottom: 2px solid #16a34a; padding-bottom: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-end; flex-shrink: 0; }
+                        .title { color: #166534; margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 1px; line-height: 1; }
+                        
+                        .info { display: grid; grid-template-cols: 1fr 1fr; gap: 20px; margin-bottom: 15px; background: #f8fafc; padding: 12px 15px; rounded-xl; flex-shrink: 0; border: 1px solid #e2e8f0; }
+                        .label { color: #64748b; font-size: 9px; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; }
+                        .value { font-size: 13px; font-weight: 600; margin-top: 2px; color: #1e293b; }
+                        
+                        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; flex-shrink: 0; }
+                        th { background: #16a34a; text-align: left; padding: 6px 10px; color: white; font-size: 9px; text-transform: uppercase; }
+                        td { padding: 6px 10px; font-size: 11px; }
+                        
+                        .totals { display: flex; justify-content: flex-end; flex-shrink: 0; }
+                        .totals-box { background: #f1f5f9; padding: 10px 15px; border-radius: 8px; text-align: right; border: 1px solid #e2e8f0; border-left: 3px solid #16a34a; display: inline-block;}
+                        
+                        .flex-grow { flex-grow: 1; display: flex; flex-direction: column; }
+                        .mt-auto { margin-top: auto; }
+                        
+                        .footer { display: grid; grid-template-cols: 1fr 1fr; gap: 40px; text-align: center; flex-shrink: 0; }
+                        .signature-line { border-top: 1px solid #94a3b8; margin-top: 25px; padding-top: 5px; color: #64748b; font-size: 10px; width: 70%; margin-left: auto; margin-right: auto; }
+                        
                         @media print { .no-print { display: none; } }
                     </style>
                 </head>
                 <body>
-                    <div class="header">
-                        <div>
-                            <h1 class="title">Liquidación de Producto</h1>
-                            <p style="margin: 4px 0 0 0; color: #16a34a; font-weight: bold; font-size: 18px;">Tunas La Huerta</p>
-                        </div>
-                        <div style="text-align: right;">
-                            <span class="label">Folio del Lote</span>
-                            <div class="value" style="font-size: 32px; color: #166534; line-height: 1;">#${e.folio}</div>
-                        </div>
-                    </div>
-                    
-                    <div class="info">
-                        <div>
-                            <span class="label">Productor</span>
-                            <div class="value">${prod?.nombre || 'Desconocido'}</div>
-                            <div style="margin-top: 10px;">
-                                <span class="label">Estatus de Pago</span>
-                                <div class="value" style="color: ${e.status === 'pagado' ? '#16a34a' : '#ca8a04'}">${e.status.toUpperCase()}</div>
-                            </div>
-                        </div>
-                        <div style="text-align: right;">
-                            <span class="label">Fecha de Recepción</span>
-                            <div class="value">${e.fecha}</div>
-                            <div style="margin-top: 10px;">
-                                <span class="label">Fecha de Impresión</span>
-                                <div class="value">${new Date().toLocaleDateString()}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Variedad</th>
-                                <th style="text-align: right;">Cantidad Recibida</th>
-                                <th style="text-align: right;">Cajas Físicas / Empaque</th>
-                                <th style="text-align: right;">Estado de Venta</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${itemsHtml}
-                        </tbody>
-                    </table>
-
-                    <div class="totals">
-                        <div class="totals-box">
-                            <span class="label">Resumen de Recepción</span>
-                            <div style="margin-top: 10px;">
-                                <p style="margin: 0; font-size: 14px;">Total Cajas Físicas: <strong>${totalCajasFisicas}</strong></p>
-                                <p style="margin: 5px 0 0 0; color: #64748b; font-size: 12px;">El productor debe retirar sus cajas vacías en la brevedad posible.</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="footer">
-                        <div>
-                            <div class="signature-line">Firma del Productor</div>
-                        </div>
-                        <div>
-                            <div class="signature-line">Recibe Bodega (Sello)</div>
-                        </div>
-                    </div>
-
-                    <div style="margin-top: 50px; text-align: center; color: #94a3b8; font-size: 10px;">
-                        <p>Documento generado por el Sistema de Gestión Tunas La Huerta.</p>
+                    <div class="page-container">
+                        ${generateReceipt(false)}
+                        <div class="cut-line"></div>
+                        ${generateReceipt(true)}
                     </div>
                 </body>
             </html>
@@ -230,7 +296,9 @@ export function EntradasSection({ productores, variedades }) {
     const getDetalles = (entradaId) => detalles.filter(d => d.registro_entrada_id === entradaId);
     const getProductor = (id) => productores.find(p => p.id === id);
 
-    const filteredEntradas = entradas.filter(e => {
+    const activeEntradas = entradas.filter(e => tab === 'pendientes' ? e.status !== 'pagado' : e.status === 'pagado');
+
+    const filteredEntradas = activeEntradas.filter(e => {
         if (!searchTerm) return true;
         const s = searchTerm.toLowerCase();
         const prod = getProductor(e.productor_id);
@@ -257,11 +325,17 @@ export function EntradasSection({ productores, variedades }) {
                 } />
             <ErrorBanner error={error} /><SuccessBanner message={success} />
 
-            {loading ? <Spinner /> : filteredEntradas.length === 0 ? <EmptyState icon={PackageSearch} message={searchTerm ? "No se encontraron entradas" : "Sin entradas registradas"} /> : (
+            <div className="flex gap-2">
+                <Button variant={tab === 'pendientes' ? 'primary' : 'outline'} onClick={() => setTab('pendientes')} className="text-xs h-8 px-4 font-bold border-green-600 outline-green-600 bg-green-50 text-green-700 data-[active=true]:bg-green-600 data-[active=true]:text-white" data-active={tab === 'pendientes'}>Pendientes</Button>
+                <Button variant={tab === 'liquidadas' ? 'primary' : 'outline'} onClick={() => setTab('liquidadas')} className="text-xs h-8 px-4 font-bold border-green-600 outline-green-600 bg-green-50 text-green-700 data-[active=true]:bg-green-600 data-[active=true]:text-white" data-active={tab === 'liquidadas'}>Historial (Liquidadas)</Button>
+            </div>
+
+            {loading ? <Spinner /> : filteredEntradas.length === 0 ? <EmptyState icon={PackageSearch} message={searchTerm ? "No se encontraron entradas en esta sección" : "Sin entradas en esta sección"} /> : (
                 <div className="space-y-3">
                     {[...filteredEntradas].sort((a, b) => b.folio - a.folio).map(e => {
                         const ds = getDetalles(e.id);
                         const prod = getProductor(e.productor_id);
+                        const todoVendido = ds.length > 0 && ds.every(d => d.status === 'completa');
                         return (
                             <Card key={e.id} className="hover:shadow-md transition-shadow">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -281,7 +355,7 @@ export function EntradasSection({ productores, variedades }) {
                                         </div>
                                     </div>
                                     <div className="flex gap-2">
-                                        {(ds.every(d => d.status === 'completa') || e.status === 'pagado') && (
+                                        {(todoVendido || e.status === 'pagado') && (
                                             <Button variant="outline" className="text-xs h-9 px-3 border-green-600 text-green-700 hover:bg-green-50" onClick={() => printEntry(e, ds)}>
                                                 <Printer className="w-3.5 h-3.5 mr-1" /> Liquidación
                                             </Button>
@@ -290,7 +364,13 @@ export function EntradasSection({ productores, variedades }) {
                                             <Eye className="w-3.5 h-3.5" /> Ver
                                         </Button>
                                         {e.status === 'pendiente' && (
-                                            <Button variant="yellow" className="text-xs h-9 px-4 font-bold" onClick={() => updateNode(e.id, { status: 'pagado' })}>
+                                            <Button 
+                                                variant="yellow" 
+                                                className="text-xs h-9 px-4 font-bold disabled:opacity-50 disabled:cursor-not-allowed" 
+                                                onClick={() => updateNode(e.id, { status: 'pagado' })}
+                                                disabled={!todoVendido}
+                                                title={!todoVendido ? "Completa la venta de todas las partidas para liquidar" : "Liquidado"}
+                                            >
                                                 Liquidado
                                             </Button>
                                         )}
@@ -544,6 +624,13 @@ export function ConsolidadorSection({ clientes, variedades }) {
         localStorage.removeItem('tunas_sale_cliente');
         localStorage.removeItem('tunas_sale_fecha');
         localStorage.removeItem('tunas_sale_context');
+    };
+
+    const handleGuardarAvance = () => {
+        // Avance is already automatically synced to localStorage on change.
+        // We just display a success message to assure the user.
+        setSuccess('Avance guardado localmente de forma segura.');
+        setTimeout(() => setSuccess(''), 4000);
     };
 
 
@@ -804,17 +891,24 @@ export function ConsolidadorSection({ clientes, variedades }) {
 
                         {cart.length > 0 && (
                             <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                                <div className="flex justify-between items-center mb-2 pb-2 border-b border-green-200/50">
+                                    <span className="font-semibold text-green-800">Total Unidades (Cajas/Kg):</span>
+                                    <span className="text-xl font-bold text-green-700">{cart.reduce((s, it) => s + Number(it.cantidad || 0), 0)}</span>
+                                </div>
                                 <div className="flex justify-between items-center">
-                                    <span className="font-semibold text-green-800">Total</span>
+                                    <span className="font-semibold text-green-800">Costo Total:</span>
                                     <span className="text-2xl font-bold text-green-700">${total.toFixed(2)}</span>
                                 </div>
                             </div>
                         )}
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2 mt-4">
                             <Button variant="secondary" className="flex-1" onClick={clearSession}>Cancelar Proceso</Button>
-                            <Button loading={saving} onClick={handleRegistrarSalida} className="flex-[2] py-3">
-                                <ShoppingCart className="w-5 h-5" /> Registrar Salida
+                            <Button variant="outline" className="flex-1 border-green-600 outline-green-600 bg-green-50 text-green-700 hover:bg-green-100" onClick={handleGuardarAvance}>
+                                <Save className="w-5 h-5 mr-1" /> Guardar Avance
+                            </Button>
+                            <Button loading={saving} onClick={handleRegistrarSalida} className="flex-[2] py-3 text-sm">
+                                <ShoppingCart className="w-5 h-5 mr-1" /> Registrar Salida
                             </Button>
                         </div>
                     </div>
